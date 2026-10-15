@@ -5,7 +5,7 @@ import { toBase64 } from "./catalog.js";
 export async function commit(env, path, text) {
   const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`;
   const headers = {
-    Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+    Authorization: `Bearer ${env.GITHUB_TOKEN.trim()}`, // 貼り付けで前後に空白や改行が入っても通るように
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "ulexite-catalog",
