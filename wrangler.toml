@@ -7,7 +7,8 @@ crons = ["0 3,15 * * *"] # 日本時間の 12時・24時
 
 [vars]
 GITHUB_REPO = "thesilver0913/ulexite-catalog"
-GITHUB_BRANCH = "main"
+GITHUB_BRANCH = "main"   # コードと静的なページ（docs/）
+PAGES_BRANCH = "pages"   # Pages が配るブランチ。毎回、親のないコミット1つに上書きする
 
 [[d1_databases]]
 binding = "DB"

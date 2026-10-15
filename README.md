@@ -9,6 +9,8 @@ VRChat 向けメディアプレイヤー「Ulexite Player」の共通サーバ�
 | 時差の表 | `/v1/timezones.json` | 予定 |
 | アプリ・ワールドのカタログ | `/v1/apps/` など | 予定 |
 
+**ブランチ**：`main` はコードと静的なページ（`docs/`、プライバシーポリシーなど）。Pages が配るのは `pages` ブランチで、Worker が書き出すたびに `docs/` の静的なページ＋各仕事のデータを「親のないコミット1つ」に上書きする（1日2回書いても履歴が積み上がらない）。Pages の設定は `pages` ブランチの `/`。
+
 仕事を足すときは `src/` にファイルを作り、`src/index.js` の `JOBS` と `SCHEDULE`、`wrangler.toml` の `crons` に足す。
 
 ## 動画の一覧（videos）
@@ -41,7 +43,7 @@ GitHub Pages
 
 ## 設置の手順
 
-1. このリポジトリを GitHub に公開で作り、Settings → Pages で「Deploy from a branch」→ `main` の `/docs` を選ぶ
+1. このリポジトリを GitHub に公開で作る（Pages の設定は、初回の書き出しで `pages` ブランチができてから「Deploy from a branch」→ `pages` の `/` を選ぶ）
 2. GitHub の Settings → Developer settings → Fine-grained tokens で、このリポジトリだけ・Contents の Read and write だけのトークンを作る
 3. Google Cloud の認証情報で、API キーの「API の制限」を YouTube Data API v3 だけにする
 4. Cloudflare に登録し、このフォルダで次を実行する

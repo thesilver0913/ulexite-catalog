@@ -1,7 +1,7 @@
 // 動画アプリの一覧。YouTube Data API で作り、/v1/videos/ に書き出す。
 
 import { buildCatalog, buildPool, isVideoId } from "./catalog.js";
-import { commit } from "./github.js";
+import { publish } from "./github.js";
 
 // ジャンル。chart は地域別の人気動画（1回1ユニット）、search はキーワード検索（1回100ユニット）。
 // 並びはワールド側のジャンルボタンの既定の並びと同じにしておく。
@@ -76,8 +76,10 @@ export async function runVideos(env) {
     genres.push({ key: genre.key, rows: results });
   }
   const catalog = buildCatalog(genres, now);
-  await commit(env, "docs/v1/videos/catalog.json", JSON.stringify(catalog));
-  await commit(env, "docs/v1/videos/pool.json", JSON.stringify(buildPool(catalog, POOL_MAX)));
+  await publish(env, {
+    "v1/videos/catalog.json": JSON.stringify(catalog),
+    "v1/videos/pool.json": JSON.stringify(buildPool(catalog, POOL_MAX)),
+  }, "update videos");
   report.updated = now;
   return report;
 }
