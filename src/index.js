@@ -23,7 +23,11 @@ export default {
         return new Response("forbidden", { status: 403 });
       const job = JOBS[url.searchParams.get("job") ?? "videos"];
       if (!job) return new Response("unknown job", { status: 404 });
-      return Response.json(await job(env));
+      try {
+        return Response.json(await job(env));
+      } catch (e) {
+        return Response.json({ error: e.message }, { status: 500 }); // 秘密の値はメッセージに含めない
+      }
     }
     return new Response("Ulexite server");
   },

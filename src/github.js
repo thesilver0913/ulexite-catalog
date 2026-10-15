@@ -17,5 +17,5 @@ export async function commit(env, path, text) {
     headers,
     body: JSON.stringify({ message: `update ${path}`, content: toBase64(text), branch: env.GITHUB_BRANCH, sha }),
   });
-  if (!res.ok) throw new Error(`GitHub ${path} ${res.status}`);
+  if (!res.ok) throw new Error(`GitHub ${path} ${res.status} ${(await res.text()).slice(0, 200)}`);
 }
