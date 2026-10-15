@@ -73,3 +73,7 @@ npm test
 ## プライバシーポリシー
 
 [docs/privacy.html](docs/privacy.html)（Pages では `/privacy.html`）。
+
+## ライセンス
+
+[MIT](LICENSE)。Ulexite Player 本体（Unity 側）は別のライセンス（VN3）。
