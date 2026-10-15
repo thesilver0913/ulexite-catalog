@@ -12,7 +12,7 @@ GITHUB_BRANCH = "main"
 [[d1_databases]]
 binding = "DB"
 database_name = "ulexite-catalog"
-database_id = "ここに d1 create で表示された database_id を貼る"
+database_id = "1a32c3a9-b132-4842-b5b1-aa49bef0a50e"
 
 # 秘密の値は wrangler secret put で登録する（このファイルには書かない）
 #   YOUTUBE_API_KEY … YouTube Data API v3 だけに制限したキー
