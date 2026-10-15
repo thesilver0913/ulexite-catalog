@@ -21,6 +21,8 @@ assert.equal(catalog.genres[0].videos.length, 1, "不正なIDは外す");
 assert.equal(catalog.genres[0].videos[0].title, "タイトル 改行", "制御文字は空白に");
 assert.equal(catalog.genres[0].videos[0].live, true);
 
+assert.equal(buildCatalog([{ key: "c", rows: [{ id: "ccccccccccc", title: "🔴️LIVE‍", channel: "", live: 0 }] }], 1).genres[0].videos[0].title, "🔴LIVE", "見えない記号は外す");
+
 const pool = buildPool(catalog, 10);
 assert.deepEqual(pool.ids, ["aaaaaaaaaaa", "bbbbbbbbbbb"], "重複なし・出てきた順");
 assert.equal(buildPool(catalog, 1).ids.length, 1);

@@ -6,7 +6,10 @@ export const FORMAT_VERSION = 1;
 export const isVideoId = (id) => typeof id === "string" && /^[A-Za-z0-9_-]{11}$/.test(id);
 
 /** タイトルなどを配る前に整える（制御文字を除き、長さを抑える）。 */
-export const clean = (s, max) => String(s ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max);
+export const clean = (s, max) => String(s ?? "")
+  .replace(/[\u0000-\u001f\u007f]/g, " ")
+  .replace(/[\ufe0e\ufe0f\u200d]/g, "") // 絵文字の見た目の指定・つなぎ（フォントにないので □ になる。外しても見た目は変わらない）
+  .trim().slice(0, max);
 
 /**
  * ワールドが読む catalog.json。
