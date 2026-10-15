@@ -1,0 +1,20 @@
+name = "ulexite-catalog"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[triggers]
+crons = ["0 3,15 * * *"] # 日本時間の 12時・24時
+
+[vars]
+GITHUB_REPO = "thesilver0913/ulexite-catalog"
+GITHUB_BRANCH = "main"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ulexite-catalog"
+database_id = "ここに d1 create で表示された database_id を貼る"
+
+# 秘密の値は wrangler secret put で登録する（このファイルには書かない）
+#   YOUTUBE_API_KEY … YouTube Data API v3 だけに制限したキー
+#   GITHUB_TOKEN    … このリポジトリの Contents だけ読み書きできる fine-grained token
+#   RUN_TOKEN       … 手動で動かすときの合言葉（自分で決めた長い文字列）
