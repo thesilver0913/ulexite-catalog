@@ -1,14 +1,25 @@
 # ulexite-catalog
 
-VRChat 向けメディアプレイヤー「Ulexite Player」の共通サーバー。Cloudflare Worker が YouTube Data API で動画の一覧を作り、このリポジトリの `docs/v1/` に JSON で書き出す。GitHub Pages がそのまま配る。
+VRChat 向けメディアプレイヤー「Ulexite Player」の共通サーバー。Cloudflare Worker が各アプリのデータを作り、このリポジトリの `docs/v1/` に JSON で書き出す。GitHub Pages がそのまま配る（VRChat の String Loading は Cloudflare から直接読めないため）。
+
+| 仕事（job） | 書き出す先 | 状態 |
+| --- | --- | --- |
+| `videos` 動画アプリの一覧（YouTube Data API） | `/v1/videos/` | 稼働 |
+| 天気（気象庁の予報） | `/v1/weather/` | 予定 |
+| 時差の表 | `/v1/timezones.json` | 予定 |
+| アプリ・ワールドのカタログ | `/v1/apps/` など | 予定 |
+
+仕事を足すときは `src/` にファイルを作り、`src/index.js` の `JOBS` と `SCHEDULE`、`wrangler.toml` の `crons` に足す。
+
+## 動画の一覧（videos）
 
 ```
 YouTube Data API ← Cloudflare Worker（Cron、1日2回）→ D1
                          │ GitHub の API でコミット
                          ▼
 GitHub Pages
-  ├ /v1/pool.json    … 動画IDの一覧。Unity のエディタ拡張がアップロード時に読み、URL をワールドに焼き込む
-  └ /v1/catalog.json … ジャンルごとの並びとタイトル。ワールドが String Loading で読む
+  ├ /v1/videos/pool.json    … 動画IDの一覧。Unity のエディタ拡張がアップロード時に読み、URL をワールドに焼き込む
+  └ /v1/videos/catalog.json … ジャンルごとの並びとタイトル。ワールドが String Loading で読む
 ```
 
 - タイトルなどの API のデータは毎回取り直す（30日より古くしない）。消えた・非公開の動画は外す
@@ -18,11 +29,11 @@ GitHub Pages
 ## JSON の形式（version 1）
 
 ```jsonc
-// catalog.json
+// videos/catalog.json
 { "version": 1, "updated": 1760500000, "genres": [
   { "key": "popular_jp", "videos": [ { "id": "11文字のID", "title": "…", "channel": "…", "live": false } ] }
 ] }
-// pool.json
+// videos/pool.json
 { "version": 1, "updated": 1760500000, "ids": [ "11文字のID" ] }
 ```
 
@@ -48,7 +59,7 @@ npx wrangler deploy
 5. 初回は手動で動かす（以後は1日2回自動）
 
 ```bash
-curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" https://ulexite-catalog.<アカウント>.workers.dev/run
+curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=videos"
 ```
 
 ## テスト
