@@ -1,6 +1,6 @@
 # ulexite-catalog
 
-VRChat 向けメディアプレイヤー「Ulexite Player」の共通サーバー。Cloudflare Worker が各アプリのデータを作り、このリポジトリの `docs/v1/` に JSON で書き出す。GitHub Pages がそのまま配る（VRChat の String Loading は Cloudflare から直接読めないため）。
+VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Cloudflare Worker が各アプリのデータを作り、このリポジトリの `docs/v1/` に JSON で書き出す。GitHub Pages がそのまま配る（VRChat の String Loading は Cloudflare から直接読めないため）。
 
 | 仕事（job） | 書き出す先 | 状態 |
 | --- | --- | --- |
@@ -76,4 +76,4 @@ npm test
 
 ## ライセンス
 
-[MIT](LICENSE)。Ulexite Player 本体（Unity 側）は別のライセンス（VN3）。
+[MIT](LICENSE)。Ulexite TV 本体（Unity 側）は別のライセンス（VN3）。
