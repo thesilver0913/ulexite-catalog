@@ -3,13 +3,14 @@
 // 手動で動かすときは POST /run?job=videos（Authorization: Bearer RUN_TOKEN）。
 
 import { runVideos } from "./videos.js";
+import { runCommon } from "./common.js";
 
 // cron の式 → 仕事。wrangler.toml の crons と合わせる
 const SCHEDULE = {
-  "0 3,15 * * *": ["videos"], // 日本時間の 12時・24時
+  "0 3,15 * * *": ["videos", "common"], // 日本時間の 12時・24時（共通の feed は、地震などを入れるときに1分おきの仕組みへ移す）
 };
 
-const JOBS = { videos: runVideos };
+const JOBS = { videos: runVideos, common: runCommon };
 
 export default {
   async scheduled(event, env, ctx) {
