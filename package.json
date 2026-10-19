@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node src/catalog.test.mjs"
+    "test": "node src/catalog.test.mjs && node src/common.test.mjs"
   }
 }

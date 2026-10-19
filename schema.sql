@@ -15,3 +15,9 @@ CREATE TABLE IF NOT EXISTS ranks (
   seen INTEGER NOT NULL,
   PRIMARY KEY (genre, id)
 );
+
+-- 小さな状態（共通の feed の前回の中身の印など）。仕事が自分でも作る
+CREATE TABLE IF NOT EXISTS kv (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

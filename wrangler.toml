@@ -3,7 +3,7 @@ main = "src/index.js"
 compatibility_date = "2026-09-01"
 
 [triggers]
-crons = ["0 3,15 * * *"] # 日本時間の 12時・24時
+crons = ["0 3,15 * * *", "* * * * *"] # 日本時間の 12時・24時（動画）、1分おき（共通の feed）
 
 [vars]
 GITHUB_REPO = "thesilver0913/ulexite-catalog"
