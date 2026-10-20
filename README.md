@@ -10,6 +10,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | `map` 天気の地図の点（アメダスの気温・震度の観測点・震源） | `/v1/feed/weather-map.json` | 稼働 |
 | `map` 天気の地図の面（雨雲・警報の透明画像。GitHub Actions が作る） | `/v1/feed/img/` | 稼働（津波は予定） |
 | `timezones` 時差と夏時間の表・主要都市（IANA のタイムゾーンデータから計算） | `/v1/timezones.json` | 稼働 |
+| `metar` 航空気象（METAR・TAF の読み解き。NOAA Aviation Weather Center） | `/v1/feed/metar.json` | 稼働 |
 | アプリ・ワールドのカタログ | `/v1/apps/` など | 予定 |
 
 **ブランチ**：`main` はコードと静的なページ（`docs/`、プライバシーポリシーなど）。Pages が配るのは `pages` ブランチで、Worker が書き出すたびに `docs/` の静的なページ＋各仕事のデータを「親のないコミット1つ」に上書きする（1日2回書いても履歴が積み上がらない）。Pages の設定は `pages` ブランチの `/`。
@@ -23,6 +24,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | 毎時15〜18分 | `common`＋`weather` を15件ずつ読んで D1 に置く |
 | 毎時19分 | `common`＋`weather` をまとめて書き出す |
 | 毎時5・25・45分 | `common`＋`map`（天気の地図。中身が変わったときだけ書き出す） |
+| 毎時7・17・27・37・47・57分 | `common`＋`metar`（航空気象。10分おき。変わったときだけ書き出す） |
 | 毎時0・30分（GitHub Actions） | `map` の画像（雨雲のコマ送り・警報の塗り分け）を作って `pages` ブランチに置く |
 | 毎日 4時10分（日本時間 13時10分。GitHub Actions） | `timezones`（時差の表）を作って `pages` ブランチに置く |
 
@@ -103,6 +105,24 @@ GitHub Pages
   - **回数の注意**：画像を置くたびに Pages のビルドが1回走る。30分おき＝2回/時で、共通 feed（最大8回/時）と合わせて「1時間に10回」の目安に収める。短くするなら、画像専用のリポジトリ（別の Pages）に分ける
   - **ぶつかったとき**：Worker と Actions が同じ `pages` ブランチを書き換えるので、Actions は取ってから push を繰り返す（負けたほうは次に作り直される。雨雲は30分、feed は次の回）
 
+## 航空気象（metar）
+
+METAR アプリが10分おきに読む。**日本の空港 38 件**の METAR（現況）と TAF（予報）を、**読み解いた形**で入れる（端末は表示するだけ。データで書くアプリの決まり）。
+
+- **データ**：米国 NOAA の Aviation Weather Center の Data API（キー不要）。**METAR と TAF で1回ずつ**、**空港コードを並べて1回で取る**（`format=json`。`hours` は付けない＝付けると報告が複数返り、多いときに取りこぼす）。エンドポイントごとに1分1回までの決まりに収まる。独自の User-Agent を名乗る
+- **空港は固定**（`src/metar.js` の `AIRPORTS`。日本の主要 38 件。名称は日本語・英語の短い名前と正式名）。共通サーバーはワールドごとの設定を知らないので、制作者が追加できるのはこの中のコードだけ。増やすときは `AIRPORTS` に足す（ICAO コード・名前・正式名）
+- **METAR の読み解き**（`readMetar`）：電文をそのまま出すための `raw` と `parts`（空港コードを [ ] で囲んで並べる用）に加えて、
+  - `wind`：`dir`（度）・`kt`・`gust`・`variable`（VRB）・`nameJa`（北北西）・`nameEn`（NNW）・`calm`
+  - `vis`：`m`（メートル。9999 と CAVOK は 10000）・`over`（以上）・`textJa`（10km以上・1.2km・800m）
+  - `clouds`：低い順に `cover`（FEW/SCT/BKN/OVC/VV）・`base`（ft）・`code`（FEW030）・`textJa`（少し 3,000ft）
+  - `wx`：天気（`code`・`textJa`（弱いにわか雨）・`textEn`）。なければ `null`
+  - `tempC`・`dewpC`・`qnh`（hPa）・`qnhInHg`（小さく併記する用。1021 → 30.15）・`fltCat`（VFR/MVFR/IFR/LIFR）
+- **TAF**：`raw`・`parts`・`at`（発行時刻）
+- **時刻**：`at`（日本時間の ISO。例 `2026-10-21T00:00:00+09:00`）と `atZ`（UTC の ISO）。`raw` の中の `201500Z` は観測の時刻
+- **飛行区分**：AWC の `fltCat` をそのまま使う。ないときは視程と天井（BKN・OVC・VV のいちばん低い層）から計算する
+- 出典「NOAA Aviation Weather Center」と「実際の運航には使わないでください」をアプリに出す（`source` と `notice` も入れてある。表示はアプリの翻訳表のほうを使う）
+- 大きさは約 43KB（38 件）。10分おきに読む
+
 ## 時差の表（timezones）
 
 時計アプリの世界時計が読む。**主要都市 40 件**と、その**標準時の UTC からのずれ（分）**、**夏時間の決まり**。Udon はタイムゾーンの機能を持てない（`TimeZoneInfo` が使えない）ので、時差を自分で計算できる形で配る。
@@ -162,6 +182,17 @@ GitHub Pages
         "end":   { "month": 4, "day": 1, "weekday": 0, "minute": 120 } } }
   },
   "cities": [ { "key": "Tokyo", "name": "東京", "nameEn": "Tokyo", "zone": "Asia/Tokyo", "lat": 35.68, "lon": 139.69 } ] }
+// feed/metar.json
+{ "version": 1, "updated": 1760500000, "source": "NOAA Aviation Weather Center", "notice": "実際の運航には使わないでください",
+  "airports": [ { "icao": "RJTT", "name": "東京（羽田）", "long": "東京国際空港（羽田）", "nameEn": "Tokyo (Haneda)", "longEn": "…",
+    "lat": 35.553, "lon": 139.781, "at": "2026-10-21T00:00:00+09:00", "atZ": "2026-10-20T15:00:00Z", "fltCat": "VFR",
+    "metar": { "raw": "METAR RJTT 201500Z 34008KT 9999 FEW030 18/09 Q1021 NOSIG",
+      "parts": ["METAR", "RJTT", "201500Z", "34008KT", "9999", "FEW030", "18/09", "Q1021", "NOSIG"],
+      "wind": { "dir": 340, "kt": 8, "gust": null, "variable": false, "nameJa": "北北西", "nameEn": "NNW", "calm": false },
+      "vis": { "m": 10000, "over": true, "textJa": "10km以上", "textEn": "10 km or more" },
+      "clouds": [ { "cover": "FEW", "base": 3000, "code": "FEW030", "textJa": "少し 3,000ft", "textEn": "Few 3,000 ft" } ],
+      "wx": null, "tempC": 18, "dewpC": 9, "qnh": 1021, "qnhInHg": 30.15, "fltCat": "VFR", "obsTime": "2015Z" },
+    "taf": { "raw": "TAF RJTT 201105Z 2012/2118 30006KT 9999 FEW010 BKN020", "parts": ["TAF", "RJTT", "…"], "at": "2026-10-20T11:05:00.000Z" } } ] }
 ```
 
 後方互換を守る：項目は増やしても消さない。読む側は知らない項目を無視する。形式を変えるときは `version` を上げて別のパス（`/v2/`）に出す。
@@ -190,6 +221,7 @@ curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<�
 curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=common&force"
 curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=weather"   # 外への読み込みが多いので有料プラン向け。無料プランでは毎時の自動に任せる
 curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=map&force"
+curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=metar&force"
 ```
 
 ## テスト
