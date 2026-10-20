@@ -121,8 +121,9 @@ function ruleInstants(rule, year) {
   return { start: at(rule.start), end: at(rule.end) };
 }
 
-/** 決まりから見て、その時刻が夏時間か。 */
+/** 決まりから見て、その時刻が夏時間か。決まりがなければ false。 */
 export function isDst(rule, std, utcMs) {
+  if (!rule) return false;
   const localStd = utcMs + std * MINUTE;
   const { start, end } = ruleInstants(rule, new Date(localStd).getUTCFullYear());
   return end > start ? localStd >= start && localStd < end : localStd >= start || localStd < end;
@@ -163,20 +164,28 @@ export function deriveRule(tz, ts, std) {
     const wantAfter = isDst(rule, std, t.at) ? std + save : std;
     if (wantBefore !== before || wantAfter !== after) return null;
   }
+  // 切り替わりの前後だけでなく、期間中を10日おきにも確かめる
+  // （切り替わりを取りこぼしていても、決まりが実データと食い違えば決まりにしない）
+  const from = ts[0].at - 30 * DAY, to = ts[ts.length - 1].at + 30 * DAY;
+  for (let u = from; u < to; u += 10 * DAY)
+    if ((isDst(rule, std, u) ? std + save : std) !== offsetMinutes(tz, u)) return null;
   return rule;
 }
 
-/** 1つのタイムゾーンの表。いまから1年前〜11年後を見て、決まりか、切り替わりの並びにする。 */
+/**
+ * 1つのタイムゾーンの表。**これから先**（いま〜11年後）の切り替わりを見て、決まりか、切り替わりの並びにする。
+ * 夏時間をやめた（ずっと夏時間になった）地域は、切り替わりがなくなるので、いまの時差をそのまま標準時にする。
+ * 例：ブリティッシュコロンビアは 2026-03-09 から永久 -07（tzdata 2026b。時差そのものは 2026-11-01 から変わらない）。
+ */
 export function zoneTable(tz, now = Date.now()) {
-  const year = new Date(now).getUTCFullYear();
-  const jan = offsetMinutes(tz, Date.UTC(year, 0, 15)), jul = offsetMinutes(tz, Date.UTC(year, 6, 15));
-  const std = Math.min(jan, jul);
-  const ts = findTransitions(tz, Date.UTC(year - 1, 0, 1), Date.UTC(year + 11, 0, 1));
+  const ts = findTransitions(tz, now, now + 11 * 365.25 * DAY);
+  const current = offsetMinutes(tz, now);
+  if (!ts.length) return { offset: current }; // これから先は変わらない＝いまの時差が標準時（永久に夏時間の地域もここ）
+  const std = Math.min(...ts.flatMap((t) => [t.from, t.to]));
   const rule = deriveRule(tz, ts, std);
-  if (!ts.length) return { offset: std };
   if (rule) return { offset: std, dst: rule };
   // 決まりで表せない地域：そのまま切り替わりの時刻と時差を並べる（毎日作り直すので、先の分も入っている）
-  const transitions = [[Date.UTC(year - 1, 0, 1) / 1000, offsetMinutes(tz, Date.UTC(year - 1, 0, 1))]];
+  const transitions = [[Math.floor(now / 1000), current]];
   for (const t of ts) transitions.push([t.at / 1000, t.to]);
   return { offset: std, transitions };
 }

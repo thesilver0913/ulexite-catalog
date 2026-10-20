@@ -28,6 +28,14 @@ assert.deepEqual(sydney.dst.start, { month: 10, day: 1, weekday: 0, minute: 120 
 assert.deepEqual(sydney.dst.end, { month: 4, day: 1, weekday: 0, minute: 120 });
 assert.deepEqual(zoneTable("Asia/Tokyo", Date.UTC(2026, 6, 1)), { offset: 540 }, "夏時間のない地域は offset だけ");
 
+// ブリティッシュコロンビアは 2026-03-09 から永久 -07（tzdata 2026b）。時差そのものは 2026-11-01 から
+// 変わらない（夏時間のまま -420 → 標準時 -420）ので、切り替わりは見えず、決まりにはならない。
+// 10/21 の時点で「これから先の切り替わりなし」＝いまの時差 -420 が標準時。
+assert.deepEqual(zoneTable("America/Vancouver", Date.UTC(2026, 9, 21)), { offset: -420 }, "夏時間をやめた地域は、いまの時差だけ");
+assert.equal(offsetMinutes("America/Vancouver", Date.UTC(2027, 0, 15)), -420, "2027年1月も -420（-480 ではない）");
+assert.equal(offsetMinutes("America/Vancouver", Date.UTC(2030, 0, 15)), -420, "2030年も -420");
+assert.equal(isDst(null, -420, Date.UTC(2027, 0, 15)), false, "決まりがなければ夏時間ではない");
+
 // 決まりから出した夏時間が、実際の時差と1年ぶん合うか（3日おきに見る）
 for (const tz of ["Europe/London", "America/New_York", "Australia/Sydney", "America/Santiago", "Africa/Cairo"]) {
   const t = zoneTable(tz, Date.UTC(2026, 6, 1));
@@ -35,6 +43,11 @@ for (const tz of ["Europe/London", "America/New_York", "Australia/Sydney", "Amer
   for (let u = Date.UTC(2026, 0, 1); u < Date.UTC(2028, 0, 1); u += 3 * 86400e3)
     assert.equal(isDst(t.dst, t.offset, u) ? t.offset + t.dst.save : t.offset, offsetMinutes(tz, u), `${tz} ${new Date(u).toISOString()}`);
 }
+
+// 決まりは、期間中を10日おきに確かめている（切り替わりの取りこぼしで、実データと違う決まりを出さない）
+const nyRule = zoneTable("America/New_York", Date.UTC(2026, 6, 1)).dst;
+for (let u = Date.UTC(2027, 0, 1); u < Date.UTC(2031, 0, 1); u += 7 * 86400e3)
+  assert.equal(isDst(nyRule, -300, u) ? -240 : -300, offsetMinutes("America/New_York", u), `NY ${new Date(u).toISOString()}`);
 
 // 決まりで表せない並びは null（毎年ちがう）
 assert.equal(deriveRule("Asia/Tokyo", [], 540), null);
