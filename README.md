@@ -7,6 +7,8 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | `videos` 動画アプリの一覧（YouTube Data API） | `/v1/videos/` | 稼働 |
 | `common` 共通の feed（地震・津波・警報・注意報。気象庁） | `/v1/feed/common.json` | 稼働 |
 | `weather` 天気（気象庁の予報・アメダス、日の出入りと月の計算） | `/v1/feed/weather/<府県予報区>.json` | 稼働 |
+| `map` 天気の地図の点（アメダスの気温・震度の観測点・震源） | `/v1/feed/weather-map.json` | 稼働 |
+| `map` 天気の地図の面（雨雲・警報・津波の透明画像） | `/v1/feed/img/` | 予定（下の「天気の地図」） |
 | 時差の表 | `/v1/timezones.json` | 予定 |
 | アプリ・ワールドのカタログ | `/v1/apps/` など | 予定 |
 
@@ -20,6 +22,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | 毎分 | `common` |
 | 毎時15〜18分 | `common`＋`weather` を15件ずつ読んで D1 に置く |
 | 毎時19分 | `common`＋`weather` をまとめて書き出す |
+| 毎時5・25・45分 | `common`＋`map`（天気の地図。中身が変わったときだけ書き出す） |
 
 無料プランの「外への読み込みは1回50件まで」に収まるように組んである。仕事を足すときは `src/` にファイルを作り、`jobsAt` と `JOBS`（手動で動かす名前）に足す。
 
@@ -49,6 +52,7 @@ GitHub Pages
 - 警報・注意報：2026年5月からの新しい防災気象情報（`warning/data/r8/map.json`）。区域（一次細分区域）ごと・種類ごとに最新の状態を見て、解除されていないものを府県予報区のコードにまとめる。名前は気象庁の表記（`レベル4大雨危険警報` など）。指定河川洪水予報（氾濫）は入れていない
 - **府県の一部の区域だけに出ているときは、各項目に区域の名前 `regions`**（一次細分区域の名前の並び。気象庁の表記のまま）を添える。府県の区域すべてに出ているときは付けない（付いていなければ府県全体）。ワールドでは「強風注意報（伊豆諸島北部・伊豆諸島南部）」のように添えて出す
 - 気象庁の発表をそのままの形で伝えるだけで、独自の判定・予測・要約はしない（気象業務法）
+- **中身の作り方を変えたとき**：気象庁のデータが変わっていないと書き出されないので、`src/common.js` の `COMMON_BUILD` を上げる（上げると、次の実行で気象庁のデータが同じでも作り直して書き出す。デプロイしただけでは反映されない）
 
 ### 発表からワールドで読めるまで
 
@@ -80,6 +84,15 @@ GitHub Pages
 - **十勝地方（014030）・奄美地方（460040）**：自分の予報のファイルがないので、親のファイル（014100・460100）から自分の区域を取る。十勝の週間予報の気温は釧路のものしかないので出さない
 - `station`：予報の地点の名前と緯度・経度（地図などの代表点に使える）
 
+## 天気の地図（map）
+
+天気アプリの地図タブのデータ。**点**は `weather-map.json`（緯度経度と値。ワールドが文字や点を並べる）、**面**は透明の PNG（画像の読み込みは1回に1枚なので、1時間ぶんのコマを1枚にまとめる）。20分おき（毎時5・25・45分）に読み直し、中身が変わったときだけ書き出す。
+
+- **`amedas`**：アメダスの気温（`amedas/data/map/<時刻>.json` の `temp` の品質が 0 のものだけ）。そのままでは 900件ほどあり、2048px の地図では値の札が重なるので、**緯度・経度 0.5度の格子に1つ**（同じ格子では観測所のコードの小さいほう）に間引く。いまは 265件ほど・約10KB。緯度・経度は3桁まで（約 100m）
+- **`quakePoints`・`quakeEpi`**：最新の「震源・震度情報」の震度の観測点（気象庁の `latlon`。震度の大きい順に300件まで）と震源。地震の古さでは切っていない（「最新の地震」として出す。時刻は `quakeEpi.at`）
+- **`rainAt`**：雨雲のコマの時刻（`feed/img/rain-frames.png` の最初のコマ）。**まだ作っていないので `null`**
+- **面の画像（未着手）**：`feed/img/rain-frames.png`（過去1時間の雨雲。4×3コマを1枚に。2048×1536）・`warn.png`（警報・注意報の区域の塗り分け）・`tsunami.png`（津波の沿岸）。仕様は `docs/spec.md` の「地図タブ」で、合成は GitHub Actions（Python）。**下地の日本地図の範囲・図法を本体のセッションと合わせる必要がある**（案：Web メルカトル、緯度 24〜46度・経度 121.4〜148.6度、2048×2048。`docs/CHANGES.md` 参照）
+
 ## JSON の形式（version 1）
 
 ```jsonc
@@ -106,6 +119,13 @@ GitHub Pages
   "moon": { "phase": 3, "name": "十三夜", "nameEn": "Waxing Gibbous", "age": 8.7, "nextFull": "2026-10-26", "rise": "13:45", "set": null,
             "days": [ { "date": "2026-10-20", "phase": 3, "name": "十三夜", "nameEn": "Waxing Gibbous" } ] },  // 8日分。月の出・入りがない日は null
   "station": { "name": "東京", "nameEn": "Tokyo", "lat": 35.6917, "lon": 139.75 } }
+// feed/weather-map.json
+{ "version": 1, "updated": 1760500000,
+  "rainAt": null,   // 雨雲の画像の最初のコマの時刻。まだ作っていないので null
+  "amedasAt": "2026-10-20T22:50:00+09:00",
+  "amedas": [ { "lat": 35.692, "lon": 139.75, "t": 18.4 } ],   // 0.5度の格子に1つ。品質が正常な気温だけ
+  "quakePoints": [ { "lat": 35.65, "lon": 140.05, "int": "4" } ],  // 震度は気象庁の表記（"5弱" など）
+  "quakeEpi": { "lat": 35.7, "lon": 140.1, "max": "5弱", "place": "千葉県北西部", "at": "2026-10-19T10:00:00+09:00" } }  // 地震がないときは null
 ```
 
 後方互換を守る：項目は増やしても消さない。読む側は知らない項目を無視する。形式を変えるときは `version` を上げて別のパス（`/v2/`）に出す。
@@ -133,6 +153,7 @@ npx wrangler deploy
 curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=videos"
 curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=common&force"
 curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=weather"   # 外への読み込みが多いので有料プラン向け。無料プランでは毎時の自動に任せる
+curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=map&force"
 ```
 
 ## テスト

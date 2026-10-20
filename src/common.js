@@ -7,6 +7,12 @@ import { clean } from "./catalog.js";
 /** 本体（Ulexite TV）の最新のバージョン。リリースのたびに上げる。 */
 export const LATEST_TV_VERSION = "0.2.0";
 
+/**
+ * この feed の中身の作り方の版。作り方を変えたら上げる。
+ * 気象庁のデータが変わっていなくても、次の実行で作り直して書き出す（デプロイしただけでは書き出されない、を防ぐ）。
+ */
+export const COMMON_BUILD = "2";
+
 const JMA = "https://www.jma.go.jp/bosai";
 const MAX_QUAKES = 10;
 const MAX_AREAS = 20;
@@ -213,18 +219,21 @@ export async function fetchCommon() {
 export async function runCommon(env, { force = false } = {}) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
   const stamp = await sourceStamp();
-  if (!force && stamp === await kvGet(env, "common.stamp")) return { ok: true, changed: false };
+  // 気象庁のデータも、このコードの中身の作り方（COMMON_BUILD）も変わっていなければ、何もしない
+  if (!force && stamp === await kvGet(env, "common.stamp") && COMMON_BUILD === await kvGet(env, "common.build"))
+    return { ok: true, changed: false };
 
   const common = await fetchCommon();
   const { updated, ...body } = common;
   const hash = await sha256(JSON.stringify(body));
   if (!force && hash === await kvGet(env, "common.hash")) {
-    await kvSet(env, "common.stamp", stamp).run();
+    await env.DB.batch([kvSet(env, "common.stamp", stamp), kvSet(env, "common.build", COMMON_BUILD)]).run();
     return { ok: true, changed: false };
   }
   const last = Number(await kvGet(env, "common.publishedAt") ?? 0);
   if (!force && updated - last < MIN_PUBLISH_GAP) return { ok: true, pending: true }; // 印を残さないので、次の回にもう一度確かめる
   await publish(env, { "v1/feed/common.json": JSON.stringify(common) }, "共通の feed を更新");
-  await env.DB.batch([kvSet(env, "common.stamp", stamp), kvSet(env, "common.hash", hash), kvSet(env, "common.publishedAt", updated)]);
+  await env.DB.batch([kvSet(env, "common.stamp", stamp), kvSet(env, "common.build", COMMON_BUILD),
+    kvSet(env, "common.hash", hash), kvSet(env, "common.publishedAt", updated)]);
   return { ok: true, changed: true, updated, quakes: common.quakes.length, warningAreas: Object.keys(common.warnings).length };
 }

@@ -5,6 +5,7 @@
 import { runVideos } from "./videos.js";
 import { runCommon } from "./common.js";
 import { runWeather, runWeatherBatch, publishWeather, BATCHES } from "./weather.js";
+import { runMap } from "./map.js";
 
 // cron は1分おきの1つだけ（wrangler.toml）。その分にやる仕事をここで決め、順番に動かす。
 // 別々の cron にすると同じ分に並んで動き、Pages のブランチを上書きし合って片方の書き出しが消えるため。
@@ -15,10 +16,11 @@ export function jobsAt(date) {
   const jobs = [(env) => runCommon(env)]; // 1分おきに確かめ、変わったときだけ書き出す
   if (m >= 15 && m < 15 + BATCHES) jobs.push((env) => runWeatherBatch(env, m - 15)); // 毎時15〜18分に天気を15件ずつ読む
   if (m === 15 + BATCHES) jobs.push((env) => publishWeather(env));                 // 19分にまとめて書き出す
+  if (m % 20 === 5) jobs.push((env) => runMap(env));                                // 天気の地図（20分おき。変わったときだけ書き出す）
   return jobs;
 }
 
-const JOBS = { videos: runVideos, common: runCommon, weather: runWeather };
+const JOBS = { videos: runVideos, common: runCommon, weather: runWeather, map: runMap };
 
 export default {
   async scheduled(event, env, ctx) {
