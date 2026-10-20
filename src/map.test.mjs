@@ -1,7 +1,12 @@
 // node src/map.test.mjs で確認する（気象庁には繋がない）
 import assert from "node:assert/strict";
-import { amedasPoints, quakePoints, buildWeatherMap, AMEDAS_GRID, MAX_QUAKE_POINTS } from "./map.js";
+import { amedasPoints, quakePoints, buildWeatherMap, pagesOrigin, rainAt, AMEDAS_GRID, MAX_QUAKE_POINTS } from "./map.js";
 import { jobsAt } from "./index.js";
+
+// Pages の URL は GitHub のリポジトリ名から作る（雨雲の時刻を読むのに使う）
+assert.equal(pagesOrigin("thesilver0913/ulexite-catalog"), "https://thesilver0913.github.io/ulexite-catalog/");
+assert.equal(pagesOrigin(""), "");
+assert.equal(await rainAt(undefined), null, "リポジトリ名が分からなければ雨雲なし");
 
 // アメダス：品質が正常な気温だけ、格子に1つ、緯度・経度は3桁まで、観測所のコード順で決まる
 const table = {

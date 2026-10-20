@@ -1,0 +1,59 @@
+# 天気の地図に重ねる画像（雨雲のコマ送り・警報の塗り分け）を作って pages ブランチに置く。
+# 30分おき。画像は Pages に置くが、更新のたびにビルドが走るので、共通 feed（最大8回/時）と
+# 合わせて Pages の「1時間に10回」の目安を超えないように、この間隔にしてある。
+name: map-images
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: map-images
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python -m pip install --quiet pillow
+
+      # data/class20s.json（市区町村の形）がなければ作り直す。ふだんはリポジトリにあるものを使う
+      - name: 区域の形を用意する
+        run: |
+          if [ ! -f data/class20s.json ]; then python scripts/build_areas.py; fi
+
+      - name: 画像を作る
+        run: python scripts/map_images.py --out dist
+
+      # pages ブランチ（Pages が配る）の v1/feed/img/ だけを差し替える。
+      # Worker も同じブランチを書き換えるので、取ってから push するのを繰り返す（負けたら次の回に直る）
+      - name: pages ブランチに置く
+        run: |
+          set -e
+          git config user.name "ulexite-catalog-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4; do
+            git fetch origin pages
+            git checkout -B pages origin/pages
+            mkdir -p v1/feed/img
+            cp dist/rain-frames.png dist/warn.png dist/rain.json v1/feed/img/
+            git add v1/feed/img
+            if git diff --cached --quiet; then echo "変わっていません"; exit 0; fi
+            git commit -m "天気の地図の画像を更新"
+            if git push origin pages --force-with-lease=pages:$(git rev-parse origin/pages); then exit 0; fi
+            echo "pages ブランチが動いたので、取り直します（$attempt）"
+            sleep 10
+          done
+          echo "pages ブランチに置けませんでした" >&2
+          exit 1

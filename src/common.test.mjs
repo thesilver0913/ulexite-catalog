@@ -35,8 +35,10 @@ const t = activeTsunami([
   { ift: "発表", rdt: "2026-10-19T09:00:00+09:00", json: "b.json", kind: [{ kind: "津波警報" }] },
 ], now);
 assert.equal(t.level, "津波注意報");
+assert.equal(t.rank, 1);
 assert.deepEqual(buildTsunami(t, { Head: { Headline: { Text: "津波注意報を発表しました。" } } }),
-  { level: "津波注意報", text: "津波注意報を発表しました。", at: "2026-10-19T10:00:00+09:00" });
+  { level: "津波注意報", rank: 1, text: "津波注意報を発表しました。", at: "2026-10-19T10:00:00+09:00" });
+assert.equal(buildTsunami({ entry: { rdt: "x" }, level: "大津波警報", rank: 3 }).rank, 3, "段階は機械用の番号でも持つ");
 assert.equal(activeTsunami([{ ift: "発表", rdt: "2026-10-19T10:00:00+09:00", kind: [{ kind: "津波注意報解除" }] }], now), null);
 assert.equal(activeTsunami([{ ift: "発表", rdt: "2026-10-10T10:00:00+09:00", kind: [{ kind: "津波警報" }] }], now), null, "古い発表は見ない");
 assert.deepEqual(buildTsunami(null), []);

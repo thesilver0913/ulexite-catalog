@@ -53,7 +53,7 @@ export function buildWeatherMap({ amedasAt = "", amedas = [], quake = null, rain
   const map = {
     version: 1,
     updated: Math.floor(now / 1000),
-    rainAt,   // 雨雲のコマの時刻（画像 v1/feed/img/rain-frames.png の最初のコマ。まだ作っていないので null）
+    rainAt,   // 雨雲の画像（v1/feed/img/rain-frames.png）の最初のコマの時刻。画像がまだなければ null
     amedasAt, // アメダスの観測時刻
     amedas,   // 気温の点（緯度・経度・℃）
     quakePoints: [], // 最新の地震の震度の観測点（震度の大きい順）
@@ -84,6 +84,29 @@ async function sha256(text) {
 const kvGet = async (env, key) => (await env.DB.prepare("SELECT value FROM kv WHERE key = ?").bind(key).first())?.value ?? null;
 const kvSet = (env, key, value) => env.DB.prepare("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, String(value));
 
+/** Pages の URL（GitHub のユーザー名とリポジトリ名から）。 */
+export const pagesOrigin = (repo) => {
+  const [owner, name] = String(repo ?? "").split("/");
+  return owner && name ? `https://${owner}.github.io/${name}/` : "";
+};
+
+/**
+ * 雨雲の画像（GitHub Actions が作る v1/feed/img/rain.json）の最初のコマの時刻。
+ * 画像と時刻を食い違わせないよう、画像を作った側が書いた時刻をそのまま使う。まだなければ null。
+ */
+export async function rainAt(env) {
+  const base = pagesOrigin(env?.GITHUB_REPO);
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}v1/feed/img/rain.json?t=${Date.now()}`); // キャッシュを避ける
+    if (!res.ok) return null;
+    const j = await res.json();
+    return typeof j.at === "string" ? j.at : null;
+  } catch {
+    return null; // 画像がまだない・読めないときは、雨雲なしとして出す
+  }
+}
+
 /** 最新の地震（震源・震度情報。震源と震度の観測点がそろっているもの）。 */
 async function latestQuake() {
   const list = await getJson("quake/data/list.json");
@@ -95,21 +118,22 @@ async function latestQuake() {
   return detail ? { entry, detail } : null;
 }
 
-export async function fetchWeatherMap() {
-  const [table, latest, quake] = await Promise.all([
+export async function fetchWeatherMap(env) {
+  const [table, latest, quake, rain] = await Promise.all([
     getJson("amedas/const/amedastable.json"),
     fetch(`${JMA}/amedas/data/latest_time.txt`).then((r) => r.text()),
     latestQuake(),
+    rainAt(env),
   ]);
   const amedasAt = latest.trim();
   const stamp = new Date(Date.parse(amedasAt) + 9 * 3600e3).toISOString().replace(/[-T:]/g, "").slice(0, 12) + "00";
   const obs = await getJson(`amedas/data/map/${stamp}.json`).catch(() => null);
-  return buildWeatherMap({ amedasAt, amedas: obs ? amedasPoints(table, obs) : [], quake });
+  return buildWeatherMap({ amedasAt, amedas: obs ? amedasPoints(table, obs) : [], quake, rainAt: rain });
 }
 
 export async function runMap(env, { force = false } = {}) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
-  const map = await fetchWeatherMap();
+  const map = await fetchWeatherMap(env);
   const { updated, ...body } = map;
   const hash = await sha256(JSON.stringify(body));
   if (!force && hash === await kvGet(env, "map.hash")) return { ok: true, changed: false };

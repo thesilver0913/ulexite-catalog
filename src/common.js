@@ -11,7 +11,7 @@ export const LATEST_TV_VERSION = "0.2.0";
  * この feed の中身の作り方の版。作り方を変えたら上げる。
  * 気象庁のデータが変わっていなくても、次の実行で作り直して書き出す（デプロイしただけでは書き出されない、を防ぐ）。
  */
-export const COMMON_BUILD = "2";
+export const COMMON_BUILD = "3";
 
 const JMA = "https://www.jma.go.jp/bosai";
 const MAX_QUAKES = 10;
@@ -83,12 +83,13 @@ export function activeTsunami(list, now = Date.now()) {
     .sort((a, b) => (b.rdt > a.rdt ? 1 : -1));
   const e = recent[0];
   const rank = Math.max(0, ...(e?.kind ?? []).map((k) => tsunamiRank(k.kind)));
-  return rank ? { entry: e, level: TSUNAMI_LEVEL[rank] } : null;
+  return rank ? { entry: e, level: TSUNAMI_LEVEL[rank], rank } : null;
 }
 
 export function buildTsunami(active, detail) {
   if (!active) return []; // 出ていないときは空（ワールドの when では「値なし」）
-  return { level: active.level, text: clean(detail?.Head?.Headline?.Text, 200), at: active.entry.rdt };
+  // rank は機械用の段階（1 津波注意報・2 津波警報・3 大津波警報）。表示名が変わっても壊れないように
+  return { level: active.level, rank: active.rank, text: clean(detail?.Head?.Headline?.Text, 200), at: active.entry.rdt };
 }
 
 // ---- 気象の警報・注意報（2026年5月からの新しい防災気象情報。warning/data/r8/） ----

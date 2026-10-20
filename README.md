@@ -8,7 +8,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | `common` 共通の feed（地震・津波・警報・注意報。気象庁） | `/v1/feed/common.json` | 稼働 |
 | `weather` 天気（気象庁の予報・アメダス、日の出入りと月の計算） | `/v1/feed/weather/<府県予報区>.json` | 稼働 |
 | `map` 天気の地図の点（アメダスの気温・震度の観測点・震源） | `/v1/feed/weather-map.json` | 稼働 |
-| `map` 天気の地図の面（雨雲・警報・津波の透明画像） | `/v1/feed/img/` | 予定（下の「天気の地図」） |
+| `map` 天気の地図の面（雨雲・警報の透明画像。GitHub Actions が作る） | `/v1/feed/img/` | 稼働（津波は予定） |
 | 時差の表 | `/v1/timezones.json` | 予定 |
 | アプリ・ワールドのカタログ | `/v1/apps/` など | 予定 |
 
@@ -23,6 +23,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | 毎時15〜18分 | `common`＋`weather` を15件ずつ読んで D1 に置く |
 | 毎時19分 | `common`＋`weather` をまとめて書き出す |
 | 毎時5・25・45分 | `common`＋`map`（天気の地図。中身が変わったときだけ書き出す） |
+| 毎時0・30分（GitHub Actions） | `map` の画像（雨雲のコマ送り・警報の塗り分け）を作って `pages` ブランチに置く |
 
 無料プランの「外への読み込みは1回50件まで」に収まるように組んである。仕事を足すときは `src/` にファイルを作り、`jobsAt` と `JOBS`（手動で動かす名前）に足す。
 
@@ -90,8 +91,16 @@ GitHub Pages
 
 - **`amedas`**：アメダスの気温（`amedas/data/map/<時刻>.json` の `temp` の品質が 0 のものだけ）。そのままでは 900件ほどあり、2048px の地図では値の札が重なるので、**緯度・経度 0.5度の格子に1つ**（同じ格子では観測所のコードの小さいほう）に間引く。いまは 265件ほど・約10KB。緯度・経度は3桁まで（約 100m）
 - **`quakePoints`・`quakeEpi`**：最新の「震源・震度情報」の震度の観測点（気象庁の `latlon`。震度の大きい順に300件まで）と震源。地震の古さでは切っていない（「最新の地震」として出す。時刻は `quakeEpi.at`）
-- **`rainAt`**：雨雲のコマの時刻（`feed/img/rain-frames.png` の最初のコマ）。**まだ作っていないので `null`**
-- **面の画像（未着手）**：`feed/img/rain-frames.png`（過去1時間の雨雲。4×3コマを1枚に。2048×1536）・`warn.png`（警報・注意報の区域の塗り分け）・`tsunami.png`（津波の沿岸）。仕様は `docs/spec.md` の「地図タブ」で、合成は GitHub Actions（Python）。**下地の日本地図の範囲・図法を本体のセッションと合わせる必要がある**（案：Web メルカトル、緯度 24〜46度・経度 121.4〜148.6度、2048×2048。`docs/CHANGES.md` 参照）
+- **`rainAt`**：雨雲の画像（`feed/img/rain-frames.png`）の**最初のコマ**（いちばん古い）の時刻。画像を作る GitHub Actions が `feed/img/rain.json` に書いた時刻を、Worker がそのまま写す（画像と時刻を食い違わせない）。画像がまだなければ `null`
+- **面の画像**（`feed/img/`。**GitHub Actions**（`.github/workflows/map-images.yml`、30分おき）が `scripts/map_images.py` で作って `pages` ブランチに置く）：
+  - `rain-frames.png`：雨雲（気象庁の降水ナウキャスト）の**12コマを 4×3 に並べた 2048×1536**（1コマ 512×512、左上がいちばん古い、5分おきで過去55分〜現在）。ワールドは1枚だけ読んで順に切り替える
+  - `warn.png`：警報・注意報の塗り分け（2048×2048 の透明）。一次細分区域ごとのいちばん重い段階の色（`level5` は地がほぼ黒なので明るい線で囲む）で、その区域の市区町村の形を塗る
+  - `rain.json`：`{ "version": 1, "at": "…", "to": "…", "frames": 12, "step": 5 }`（画像のコマの時刻）
+  - **範囲・図法は下地の日本地図と同じ**（設計書 5.2.2）：Web メルカトル、緯度 23.5〜46.0・経度 120.86〜148.6、2048×2048。南鳥島・沖ノ鳥島は範囲の外
+  - **市区町村の形**：気象庁は一次細分区域（class10）の形を配っていないので、市区町村（class20）の公式 GeoJSON（`common/const/geojson/class20s/<コード>.json`）を `scripts/build_areas.py` で1つにまとめて `data/class20s.json` に置いてある（1805件・2.2MB。区域の区切りが変わったら作り直す）
+  - **津波の沿岸（`tsunami.png`）は未着手**：津波予報区の形が公開されていない（市区町村から作るには「津波予報区→市区町村」の対応表が要る）。津波はバナー・通知・一覧で伝わるので後回し
+  - **回数の注意**：画像を置くたびに Pages のビルドが1回走る。30分おき＝2回/時で、共通 feed（最大8回/時）と合わせて「1時間に10回」の目安に収める。短くするなら、画像専用のリポジトリ（別の Pages）に分ける
+  - **ぶつかったとき**：Worker と Actions が同じ `pages` ブランチを書き換えるので、Actions は取ってから push を繰り返す（負けたほうは次に作り直される。雨雲は30分、feed は次の回）
 
 ## JSON の形式（version 1）
 
@@ -107,7 +116,7 @@ GitHub Pages
   "quakes": [ { "at": "2026-10-19T15:54:00+09:00", "place": "山口県北部", "placeEn": "Northern Yamaguchi Prefecture",
                 "mag": 3.1, "max": "1", "lat": 34.4, "lon": 131.5, "depth": 20,
                 "tsunamiText": "この地震による津波の心配はありません。", "areas": [ { "int": "1", "name": "山口県北部" } ] } ],
-  "tsunami": [],   // 出ているときは { "level": "津波注意報", "text": "…", "at": "…" }
+  "tsunami": [],   // 出ているときは { "level": "津波注意報", "rank": 1, "text": "…", "at": "…" }（rank は 1 注意報・2 警報・3 大津波警報）
   "warnings": { "130000": [ { "name": "雷注意報", "level": "advisory" },
                             { "name": "強風注意報", "level": "advisory", "regions": ["伊豆諸島北部", "伊豆諸島南部"] } ] },  // level：special（5）・danger（4）・warning（3）・advisory（2）。ないときは []。regions は府県の一部の区域だけのとき（府県全体なら無し）
   "warningsAt": "2026-10-19T21:40:00+09:00", "notices": [] }
@@ -160,6 +169,13 @@ curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<�
 
 ```bash
 npm test
+```
+
+地図の画像は Python（Pillow）で作る。`--check` を付けると、下地の陸に重ねた確認用の画像も作る（`scripts/` は Actions と同じもの。手元で1回動かして見た目を確かめられる）。
+
+```bash
+python scripts/build_areas.py                     # data/class20s.json を作り直す（区域の区切りが変わったとき）
+python scripts/map_images.py --out dist --check   # dist/ に rain-frames.png・rain.json・warn.png と確認用の画像
 ```
 
 ## プライバシーポリシー
