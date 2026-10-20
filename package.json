@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node src/catalog.test.mjs && node src/common.test.mjs"
+    "test": "node src/catalog.test.mjs && node src/common.test.mjs && node src/weather.test.mjs"
+  },
+  "dependencies": {
+    "suncalc": "1.9.0"
   }
 }

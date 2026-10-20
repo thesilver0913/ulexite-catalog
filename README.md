@@ -6,13 +6,22 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | --- | --- | --- |
 | `videos` 動画アプリの一覧（YouTube Data API） | `/v1/videos/` | 稼働 |
 | `common` 共通の feed（地震・津波・警報・注意報。気象庁） | `/v1/feed/common.json` | 稼働 |
-| 天気（気象庁の予報） | `/v1/weather/` | 予定 |
+| `weather` 天気（気象庁の予報・アメダス、日の出入りと月の計算） | `/v1/feed/weather/<府県予報区>.json` | 稼働 |
 | 時差の表 | `/v1/timezones.json` | 予定 |
 | アプリ・ワールドのカタログ | `/v1/apps/` など | 予定 |
 
 **ブランチ**：`main` はコードと静的なページ（`docs/`、プライバシーポリシーなど）。Pages が配るのは `pages` ブランチで、Worker が書き出すたびに `docs/` の静的なページ＋各仕事のデータを「親のないコミット1つ」に上書きする（1日2回書いても履歴が積み上がらない）。Pages の設定は `pages` ブランチの `/`。
 
-仕事を足すときは `src/` にファイルを作り、`src/index.js` の `JOBS` と `SCHEDULE`、`wrangler.toml` の `crons` に足す。
+**いつ動くか**：cron は1分おきの1つだけで、その分にやる仕事は `src/index.js` の `jobsAt` が決めて順番に動かす（別々の cron だと同じ分に並んで動き、Pages のブランチを上書きし合うため）。
+
+| 分（UTC） | 仕事 |
+| --- | --- |
+| 3時・15時の0分（日本時間の12時・24時） | `videos` だけ |
+| 毎分 | `common` |
+| 毎時15〜18分 | `common`＋`weather` を15件ずつ読んで D1 に置く |
+| 毎時19分 | `common`＋`weather` をまとめて書き出す |
+
+無料プランの「外への読み込みは1回50件まで」に収まるように組んである。仕事を足すときは `src/` にファイルを作り、`jobsAt` と `JOBS`（手動で動かす名前）に足す。
 
 ## 動画の一覧（videos）
 
@@ -60,6 +69,16 @@ GitHub Pages
 - 防災情報のページの JSON（`www.jma.go.jp/bosai/`）は、ホームページの表示用のデータで、仕様は公開されていない。ホームページのコンテンツとして上の規約で使えるが、URL や形式は予告なく変わりうる（2026年5月の防災気象情報の切り替えで、警報の JSON は `warning/data/warning/` から `warning/data/r8/` に移り、古い方は更新が止まった）。読めない・形が変わったときは、前回の feed を出し続ける（書き出さない）
 - 負荷をかけないよう、毎分の確認は小さい HEAD だけにしている。公式の配信が要るなら、気象庁防災情報 XML（PULL 型）に移す
 
+## 天気（weather）
+
+府県予報区（58件）ごとに1ファイル。毎時、予報（`forecast/data/forecast/<コード>.json`）と最新のアメダス（`amedas/data/map/…`）を読み直す。書き出しは1時間に1回。
+
+- **予報**：気象庁の発表のまま。日ごとの並び（最大7日）は週間予報を基本に、今日・明日など週間にない値は短期予報で埋める。区域はその府県予報区の最初の一次細分区域、気温は予報の地点（アメダス）のものだけ使う。`wx` は天気のコードの大まかな種類（`100` 晴れ・`200` くもり・`300` 雨・`400` 雪）、元のコードは `wxCode`、天気の文は `wxText`（気象庁の文のまま）
+- **現在の気温**：予報の地点のアメダスの最新の観測（品質が正常なものだけ。観測時刻は `current.at`）
+- **日の出入り・月**：予報の地点の位置で、こちらで計算する（[suncalc](https://github.com/mourner/suncalc)、BSD-2-Clause。気象庁のデータではない。数分の誤差がある）。月相の番号は 0 新月・2 上弦・4 満月・6 下弦をその瞬間がある日だけに付け、ほかの日は 1 三日月・3 十三夜・5 寝待月・7 有明月。月齢は正午の値
+- **十勝地方（014030）・奄美地方（460040）**：自分の予報のファイルがないので、親のファイル（014100・460100）から自分の区域を取る。十勝の週間予報の気温は釧路のものしかないので出さない
+- `station`：予報の地点の名前と緯度・経度（地図などの代表点に使える）
+
 ## JSON の形式（version 1）
 
 ```jsonc
@@ -77,6 +96,14 @@ GitHub Pages
   "tsunami": [],   // 出ているときは { "level": "津波注意報", "text": "…", "at": "…" }
   "warnings": { "130000": [ { "name": "雷注意報", "level": "advisory" } ] },  // level：special（5）・danger（4）・warning（3）・advisory（2）。ないときは []
   "warningsAt": "2026-10-19T21:40:00+09:00", "notices": [] }
+// feed/weather/130000.json
+{ "version": 1, "updatedAt": "2026-10-20T17:00:00+09:00",
+  "current": { "temp": 21.7, "at": "2026-10-20T21:50:00+09:00", "wx": "200", "wxCode": "200", "wxText": "くもり 所により 夜 雨" },
+  "days": [ { "date": "2026-10-21", "wx": "200", "wxCode": "201", "max": 29, "min": 20, "pop": 20 } ],  // 値がないときは null
+  "sun": { "rise": "05:52", "set": "17:01" },
+  "moon": { "phase": 3, "name": "十三夜", "nameEn": "Waxing Gibbous", "age": 8.7, "nextFull": "2026-10-26", "rise": "13:45", "set": null,
+            "days": [ { "date": "2026-10-20", "phase": 3, "name": "十三夜", "nameEn": "Waxing Gibbous" } ] },  // 8日分。月の出・入りがない日は null
+  "station": { "name": "東京", "nameEn": "Tokyo", "lat": 35.6917, "lon": 139.75 } }
 ```
 
 後方互換を守る：項目は増やしても消さない。読む側は知らない項目を無視する。形式を変えるときは `version` を上げて別のパス（`/v2/`）に出す。
@@ -103,6 +130,7 @@ npx wrangler deploy
 ```bash
 curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=videos"
 curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=common&force"
+curl -X POST -H "Authorization: Bearer <RUN_TOKEN>" "https://ulexite-catalog.<アカウント>.workers.dev/run?job=weather"   # 外への読み込みが多いので有料プラン向け。無料プランでは毎時の自動に任せる
 ```
 
 ## テスト

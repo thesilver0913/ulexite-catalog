@@ -4,8 +4,6 @@
 // ブランチの中身：main の docs/ の静的なページ（プライバシーポリシーなど）＋各仕事が書き出したデータ。
 // ほかの仕事（天気など）が書いたデータは消さずに残す。
 
-import { toBase64 } from "./catalog.js";
-
 const API = "https://api.github.com";
 
 function headers(env) {
@@ -52,12 +50,9 @@ export async function publish(env, files, message) {
   const pages = await listFiles(env, env.GITHUB_BRANCH, "docs/"); // main の docs/ の静的なページ
   const entries = new Map(current);
   for (const [path, file] of pages) if (!path.startsWith("v1/")) entries.set(path, file);
-  for (const [path, text] of Object.entries(files)) {
-    const blob = await gh(env, "POST", "/git/blobs", { content: toBase64(text), encoding: "base64" });
-    entries.set(path, { sha: blob.sha, mode: "100644" });
-  }
+  for (const [path, text] of Object.entries(files)) entries.set(path, { mode: "100644", content: text }); // 中身を直接渡すと GitHub が blob を作る（ファイルの数だけ API を呼ばない）
   const tree = await gh(env, "POST", "/git/trees", {
-    tree: [...entries].map(([path, f]) => ({ path, mode: f.mode, type: "blob", sha: f.sha })),
+    tree: [...entries].map(([path, f]) => ({ path, mode: f.mode, type: "blob", ...(f.content !== undefined ? { content: f.content } : { sha: f.sha }) })),
   });
   const commit = await gh(env, "POST", "/git/commits", { message, tree: tree.sha, parents: [] });
   const ref = await gh(env, "GET", `/git/ref/heads/${branch}`);
