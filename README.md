@@ -9,7 +9,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | `weather` 天気（気象庁の予報・アメダス、日の出入りと月の計算） | `/v1/feed/weather/<府県予報区>.json` | 稼働 |
 | `map` 天気の地図の点（アメダスの気温・震度の観測点・震源） | `/v1/feed/weather-map.json` | 稼働 |
 | `map` 天気の地図の面（雨雲・警報の透明画像。GitHub Actions が作る） | `/v1/feed/img/` | 稼働（津波は予定） |
-| 時差の表 | `/v1/timezones.json` | 予定 |
+| `timezones` 時差と夏時間の表・主要都市（IANA のタイムゾーンデータから計算） | `/v1/timezones.json` | 稼働 |
 | アプリ・ワールドのカタログ | `/v1/apps/` など | 予定 |
 
 **ブランチ**：`main` はコードと静的なページ（`docs/`、プライバシーポリシーなど）。Pages が配るのは `pages` ブランチで、Worker が書き出すたびに `docs/` の静的なページ＋各仕事のデータを「親のないコミット1つ」に上書きする（1日2回書いても履歴が積み上がらない）。Pages の設定は `pages` ブランチの `/`。
@@ -24,6 +24,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | 毎時19分 | `common`＋`weather` をまとめて書き出す |
 | 毎時5・25・45分 | `common`＋`map`（天気の地図。中身が変わったときだけ書き出す） |
 | 毎時0・30分（GitHub Actions） | `map` の画像（雨雲のコマ送り・警報の塗り分け）を作って `pages` ブランチに置く |
+| 毎日 4時10分（日本時間 13時10分。GitHub Actions） | `timezones`（時差の表）を作って `pages` ブランチに置く |
 
 無料プランの「外への読み込みは1回50件まで」に収まるように組んである。仕事を足すときは `src/` にファイルを作り、`jobsAt` と `JOBS`（手動で動かす名前）に足す。
 
@@ -102,6 +103,20 @@ GitHub Pages
   - **回数の注意**：画像を置くたびに Pages のビルドが1回走る。30分おき＝2回/時で、共通 feed（最大8回/時）と合わせて「1時間に10回」の目安に収める。短くするなら、画像専用のリポジトリ（別の Pages）に分ける
   - **ぶつかったとき**：Worker と Actions が同じ `pages` ブランチを書き換えるので、Actions は取ってから push を繰り返す（負けたほうは次に作り直される。雨雲は30分、feed は次の回）
 
+## 時差の表（timezones）
+
+時計アプリの世界時計が読む。**主要都市 40 件**と、その**標準時の UTC からのずれ（分）**、**夏時間の決まり**。Udon はタイムゾーンの機能を持てない（`TimeZoneInfo` が使えない）ので、時差を自分で計算できる形で配る。
+
+- 出す内容は **IANA のタイムゾーンデータ**（Node の `Intl` のタイムゾーン機能）から計算する。**GitHub Actions が1日1回**（`.github/workflows/timezones.yml`、日本時間 13時10分ごろ）作り直して `pages` ブランチに置く。夏時間の決まりが国で変わっても、ワールドの再アップロードなしで追随できる
+- **Worker では作らない**：35 のタイムゾーン × 12年ぶんの切り替わりを探すのに 0.7 秒ほどかかり、Worker の無料プランは CPU が 10ms/回のため（`scripts/build_timezones.mjs` が Actions から呼ぶ）
+- **夏時間の決まり**は「**その月の day 日以降で最初の weekday の、現地の標準時で minute 分**」で書く（`weekday` は 0=日曜）。第n 曜日も「最後の◯曜日」もこの形で表せる（例：3月最後の日曜＝`day: 25`、11月の第1日曜＝`day: 1`、チリの「9月2日以降で最初の日曜」＝`day: 2`）
+  - 南半球は始まりと終わりが逆になる。**終わりが始まりより前なら、夏時間は「終わりまで」または「始まりから」**
+  - `save` は夏時間で進む分（ほとんどは 60）
+  - 決まりで表せない地域（モロッコのラマダンなど）は `transitions`（`[[UNIX秒, 時差], …]` の並び）で出す。いまの 40 都市はすべて決まりで表せている
+- **作り方**：いまから1年前〜11年後の切り替わりを1日ずつ見つけて（1分まで詰める）、その並びが毎年同じ形なら決まりにし、**実際の切り替わりと合うかをその場で確かめる**。合わなければ `transitions` にする
+- **都市**：`key`（保存に使う名前。変えない）・`name`（日本語）・`nameEn`・`zone`（IANA の名前）・`lat`・`lon`。都市を増やすときは `src/timezones.js` の `CITIES` に足す
+- IANA のタイムゾーンデータはパブリックドメイン（出典の表記は要らない）。表の中の `source` にその旨を書いている
+
 ## JSON の形式（version 1）
 
 ```jsonc
@@ -135,6 +150,18 @@ GitHub Pages
   "amedas": [ { "lat": 35.692, "lon": 139.75, "t": 18.4 } ],   // 0.5度の格子に1つ。品質が正常な気温だけ
   "quakePoints": [ { "lat": 35.65, "lon": 140.05, "int": "4" } ],  // 震度は気象庁の表記（"5弱" など）
   "quakeEpi": { "lat": 35.7, "lon": 140.1, "max": "5弱", "place": "千葉県北西部", "at": "2026-10-19T10:00:00+09:00" } }  // 地震がないときは null
+// timezones.json
+{ "version": 1, "updated": 1760500000, "source": "IANA タイムゾーンデータ（Intl から計算）",
+  "zones": {
+    "Asia/Tokyo": { "offset": 540 },   // 夏時間がない地域は offset だけ
+    "Europe/London": { "offset": 0, "dst": { "save": 60,
+        "start": { "month": 3, "day": 25, "weekday": 0, "minute": 60 },   // 3月25日以降で最初の日曜の 1:00（標準時）
+        "end":   { "month": 10, "day": 25, "weekday": 0, "minute": 60 } } },
+    "Australia/Sydney": { "offset": 600, "dst": { "save": 60,
+        "start": { "month": 10, "day": 1, "weekday": 0, "minute": 120 },  // 南半球：終わり（4月）が始まりより前
+        "end":   { "month": 4, "day": 1, "weekday": 0, "minute": 120 } } }
+  },
+  "cities": [ { "key": "Tokyo", "name": "東京", "nameEn": "Tokyo", "zone": "Asia/Tokyo", "lat": 35.68, "lon": 139.69 } ] }
 ```
 
 後方互換を守る：項目は増やしても消さない。読む側は知らない項目を無視する。形式を変えるときは `version` を上げて別のパス（`/v2/`）に出す。
@@ -176,6 +203,7 @@ npm test
 ```bash
 python scripts/build_areas.py                     # data/class20s.json を作り直す（区域の区切りが変わったとき）
 python scripts/map_images.py --out dist --check   # dist/ に rain-frames.png・rain.json・warn.png と確認用の画像
+node scripts/build_timezones.mjs --out dist       # dist/ に timezones.json（時差の表）
 ```
 
 ## プライバシーポリシー

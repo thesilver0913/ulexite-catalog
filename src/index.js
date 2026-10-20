@@ -10,6 +10,7 @@ import { runMap } from "./map.js";
 // cron は1分おきの1つだけ（wrangler.toml）。その分にやる仕事をここで決め、順番に動かす。
 // 別々の cron にすると同じ分に並んで動き、Pages のブランチを上書きし合って片方の書き出しが消えるため。
 // 外への読み込みは1回50件まで（無料プラン）なので、重い仕事の分は組み合わせを絞る。
+// 時差の表（timezones）は計算が重いので Worker では作らず、GitHub Actions が作る。
 export function jobsAt(date) {
   const h = date.getUTCHours(), m = date.getUTCMinutes();
   if (m === 0 && (h === 3 || h === 15)) return [(env) => runVideos(env)]; // 日本時間の 12時・24時。共通の feed は次の分に回す

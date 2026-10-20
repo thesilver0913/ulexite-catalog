@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node src/catalog.test.mjs && node src/common.test.mjs && node src/weather.test.mjs && node src/map.test.mjs"
+    "test": "node src/catalog.test.mjs && node src/common.test.mjs && node src/weather.test.mjs && node src/map.test.mjs && node src/timezones.test.mjs"
   },
   "dependencies": {
     "suncalc": "1.9.0"

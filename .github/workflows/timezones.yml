@@ -1,0 +1,52 @@
+# 時差の表（v1/timezones.json）を作って pages ブランチに置く。1日1回（日本時間 13時10分ごろ）。
+# 計算は Node の Intl（IANA のタイムゾーンデータ）から。0.7秒ほどかかるので Worker では作らない
+# （Worker の無料プランは CPU が 10ms/回のため）。
+name: timezones
+
+on:
+  schedule:
+    - cron: "10 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: timezones
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 表を作る
+        run: node scripts/build_timezones.mjs --out dist
+
+      # pages ブランチ（Pages が配る）の v1/timezones.json だけを差し替える。
+      # Worker も同じブランチを書き換えるので、取ってから push するのを繰り返す
+      - name: pages ブランチに置く
+        run: |
+          set -e
+          git config user.name "ulexite-catalog-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4; do
+            git fetch origin pages
+            git checkout -B pages origin/pages
+            mkdir -p v1
+            cp dist/timezones.json v1/timezones.json
+            git add v1/timezones.json
+            if git diff --cached --quiet; then echo "変わっていません"; exit 0; fi
+            git commit -m "時差の表を更新"
+            if git push origin pages --force-with-lease=pages:$(git rev-parse origin/pages); then exit 0; fi
+            echo "pages ブランチが動いたので、取り直します（$attempt）"
+            sleep 10
+          done
+          echo "pages ブランチに置けませんでした" >&2
+          exit 1
