@@ -41,11 +41,23 @@ assert.equal(activeTsunami([{ ift: "発表", rdt: "2026-10-19T10:00:00+09:00", k
 assert.equal(activeTsunami([{ ift: "発表", rdt: "2026-10-10T10:00:00+09:00", kind: [{ kind: "津波警報" }] }], now), null, "古い発表は見ない");
 assert.deepEqual(buildTsunami(null), []);
 
-// 警報・注意報：区域ごと・種類ごとに最新の状態、府県予報区にまとめて重い順
-const area = { class10s: { "130010": { parent: "130000" }, "130030": { parent: "130000" }, "011000": { parent: "011000" } } };
+// 警報・注意報：区域ごと・種類ごとに最新の状態、府県予報区にまとめて重い順。
+// 府県の一部の区域だけのときは、その区域の名前を regions に添える（府県全体のときは付けない）
+const area = { class10s: {
+  "130010": { parent: "130000", name: "東京地方" },
+  "130020": { parent: "130000", name: "伊豆諸島北部" },
+  "130030": { parent: "130000", name: "伊豆諸島南部" },
+  "130040": { parent: "130000", name: "小笠原諸島" },
+  "011000": { parent: "011000", name: "上川地方" },
+  "460010": { parent: "460040", name: "奄美地方" },
+  "530010": { parent: "530000", name: "大阪府" },
+  "530020": { parent: "530000", name: "大阪府２" },
+} };
 const w = buildWarnings([
   { reportDatetime: "2026-10-19T09:00:00+09:00", warning: { class10Items: [
     { areaCode: "130010", kinds: [{ code: "14", status: "発表" }, { code: "10", status: "発表" }] },
+    { areaCode: "130020", kinds: [{ code: "15", status: "発表" }] },
+    { areaCode: "130030", kinds: [{ code: "15", status: "発表" }] },
     { areaCode: "011000", kinds: [{ code: "15", status: "発表" }] },
   ] } },
   { reportDatetime: "2026-10-19T10:00:00+09:00", warning: { class10Items: [
@@ -55,12 +67,28 @@ const w = buildWarnings([
   ] } },
 ], area);
 assert.deepEqual(w.warnings, { "130000": [
-  { name: "レベル4大雨危険警報", level: "danger" },
-  { name: "雷注意報", level: "advisory" },
-  { name: "レベル2大雨注意報", level: "advisory" },
+  { name: "レベル4大雨危険警報", level: "danger", regions: ["伊豆諸島南部"] },
+  { name: "雷注意報", level: "advisory", regions: ["東京地方"] },
+  { name: "レベル2大雨注意報", level: "advisory", regions: ["東京地方"] },
+  { name: "強風注意報", level: "advisory", regions: ["伊豆諸島北部", "伊豆諸島南部"] },
 ] });
 assert.equal(w.warningsAt, "2026-10-19T10:00:00+09:00");
 assert.deepEqual(buildWarnings([], area).warnings, [], "ないときは空");
+
+// 府県の区域すべてに出ているときは regions を付けない（区域が1つだけの府県も同じ）
+const report = (items) => [{ reportDatetime: "2026-10-19T10:00:00+09:00", warning: { class10Items: items } }];
+assert.deepEqual(buildWarnings(report([{ areaCode: "460010", kinds: [{ code: "15", status: "発表" }] }]), area).warnings,
+  { "460040": [{ name: "強風注意報", level: "advisory" }] }, "区域が1つだけの府県");
+assert.deepEqual(buildWarnings(report([
+  { areaCode: "530010", kinds: [{ code: "14", status: "発表" }] },
+  { areaCode: "530020", kinds: [{ code: "14", status: "発表" }] },
+]), area).warnings, { "530000": [{ name: "雷注意報", level: "advisory" }] }, "すべての区域に出ているとき");
+assert.deepEqual(buildWarnings(report([{ areaCode: "130040", kinds: [{ code: "14", status: "発表" }] }]), area).warnings,
+  { "130000": [{ name: "雷注意報", level: "advisory", regions: ["小笠原諸島"] }] }, "一部の区域だけのとき");
+// 区域の表にない府県（分からないとき）は regions を付けない
+assert.deepEqual(buildWarnings(report([{ areaCode: "999999", kinds: [{ code: "14", status: "発表" }] }]),
+  { class10s: { "999999": { parent: "990000" } } }).warnings,
+  { "990000": [{ name: "雷注意報", level: "advisory" }] }, "区域の名前が分からないとき");
 
 const c = buildCommon({}, 1760000000000);
 assert.equal(c.version, 1);

@@ -105,7 +105,8 @@ const LEVEL_NAME = { 5: "special", 4: "danger", 3: "warning", 2: "advisory" };
 /**
  * 全国の発表（r8/map.json）を府県予報区（offices）ごとにまとめる。
  * 区域（class10）ごと・種類ごとに最新の発表の状態を見て、解除されていないものを府県予報区に集める。
- * area は common/const/area.json（class10 → 府県予報区）。
+ * 府県の一部の区域だけに出ているときは、その区域の名前を regions に添える（全部の区域なら付けない）。
+ * area は common/const/area.json（class10 → 府県予報区・名前）。
  */
 export function buildWarnings(reports, area) {
   const latest = new Map(); // "区域|種類" → { rdt, status }
@@ -121,19 +122,38 @@ export function buildWarnings(reports, area) {
         if (!prev || r.reportDatetime > prev.rdt) latest.set(key, { rdt: r.reportDatetime, status: k.status });
       }
   }
-  const byOffice = {};
+  const byOffice = new Map(); // 府県予報区 → Map(種類 → Set(区域))
   for (const [key, { status }] of latest) {
     if (status === "解除") continue;
     const [code10, kind] = key.split("|");
     const office = area.class10s?.[code10]?.parent;
-    const w = WARNING_KINDS[kind];
-    if (!office || !w) continue;
-    (byOffice[office] ??= new Map()).set(kind, w);
+    if (!office || !WARNING_KINDS[kind]) continue;
+    if (!byOffice.has(office)) byOffice.set(office, new Map());
+    const kinds = byOffice.get(office);
+    if (!kinds.has(kind)) kinds.set(kind, new Set());
+    kinds.get(kind).add(code10);
   }
+  // 府県予報区の区域（一次細分区域）の数。これと比べて「府県の一部だけ」を知る
+  const areasInOffice = new Map();
+  for (const a of Object.values(area.class10s ?? {}))
+    areasInOffice.set(a.parent, (areasInOffice.get(a.parent) ?? 0) + 1);
+
   const warnings = {};
-  for (const office of Object.keys(byOffice).sort())
-    warnings[office] = [...byOffice[office].values()].sort((a, b) => b.lv - a.lv)
-      .map((w) => ({ name: w.name, level: LEVEL_NAME[w.lv] }));
+  for (const office of [...byOffice.keys()].sort()) {
+    warnings[office] = [...byOffice.get(office)]
+      .map(([kind, codes]) => ({ w: WARNING_KINDS[kind], codes: [...codes].sort() }))
+      .sort((a, b) => b.w.lv - a.w.lv)
+      .map(({ w, codes }) => {
+        const item = { name: w.name, level: LEVEL_NAME[w.lv] };
+        const total = areasInOffice.get(office) ?? 0; // 0 は区域の表にない（分からない）とき
+        // 府県の一部の区域だけのときだけ、区域の名前を添える（府県全体・分からないときは添えない）
+        if (total && codes.length < total) {
+          const regions = codes.map((c) => clean(area.class10s[c]?.name, 20)).filter(Boolean);
+          if (regions.length) item.regions = regions; // 例：強風注意報（伊豆諸島北部・伊豆諸島南部）
+        }
+        return item;
+      });
+  }
   return { warnings: Object.keys(warnings).length ? warnings : [], warningsAt: at };
 }
 
