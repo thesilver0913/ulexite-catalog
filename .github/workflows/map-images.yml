@@ -28,11 +28,6 @@ jobs:
 
       - run: python -m pip install --quiet pillow
 
-      # data/class20s.json（市区町村の形）がなければ作り直す。ふだんはリポジトリにあるものを使う
-      - name: 区域の形を用意する
-        run: |
-          if [ ! -f data/class20s.json ]; then python scripts/build_areas.py; fi
-
       - name: 画像を作る
         run: python scripts/map_images.py --out dist
 
@@ -47,7 +42,7 @@ jobs:
             git fetch origin pages
             git checkout -B pages origin/pages
             mkdir -p v1/feed/img
-            cp dist/rain-frames.png dist/warn.png dist/rain.json v1/feed/img/
+            cp dist/rain-frames.png dist/warn.png dist/tsunami.png dist/rain.json v1/feed/img/
             git add v1/feed/img
             if git diff --cached --quiet; then echo "変わっていません"; exit 0; fi
             git commit -m "天気の地図の画像を更新"

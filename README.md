@@ -8,7 +8,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | `common` 共通の feed（地震・津波・警報・注意報。気象庁） | `/v1/feed/common.json` | 稼働 |
 | `weather` 天気（気象庁の予報・アメダス、日の出入りと月の計算） | `/v1/feed/weather/<府県予報区>.json` | 稼働 |
 | `map` 天気の地図の点（アメダスの気温・震度の観測点・震源） | `/v1/feed/weather-map.json` | 稼働 |
-| `map` 天気の地図の面（雨雲・警報の透明画像。GitHub Actions が作る） | `/v1/feed/img/` | 稼働（津波は予定） |
+| `map` 天気の地図の面（雨雲・警報・津波の透明画像。GitHub Actions が作る） | `/v1/feed/img/` | 稼働 |
 | `timezones` 時差と夏時間の表・主要都市（IANA のタイムゾーンデータから計算） | `/v1/timezones.json` | 稼働 |
 | `metar` 航空気象（METAR・TAF の読み解き。NOAA Aviation Weather Center） | `/v1/feed/metar.json` | 稼働 |
 | アプリ・ワールドのカタログ | `/v1/apps/` など | 予定 |
@@ -97,11 +97,11 @@ GitHub Pages
 - **`rainAt`**：雨雲の画像（`feed/img/rain-frames.png`）の**最初のコマ**（いちばん古い）の時刻。画像を作る GitHub Actions が `feed/img/rain.json` に書いた時刻を、Worker がそのまま写す（画像と時刻を食い違わせない）。画像がまだなければ `null`
 - **面の画像**（`feed/img/`。**GitHub Actions**（`.github/workflows/map-images.yml`、30分おき）が `scripts/map_images.py` で作って `pages` ブランチに置く）：
   - `rain-frames.png`：雨雲（気象庁の降水ナウキャスト）の**12コマを 4×3 に並べた 2048×1536**（1コマ 512×512、左上がいちばん古い、5分おきで過去55分〜現在）。ワールドは1枚だけ読んで順に切り替える
-  - `warn.png`：警報・注意報の塗り分け（2048×2048 の透明）。一次細分区域ごとのいちばん重い段階の色（`level5` は地がほぼ黒なので明るい線で囲む）で、その区域の市区町村の形を塗る
+  - `warn.png`：警報・注意報の塗り分け（2048×2048 の透明）。一次細分区域ごとのいちばん重い段階の色（`level5` は地がほぼ黒なので明るい線で囲む）で、その区域の形を塗る
+  - `tsunami.png`：**津波の沿岸**（2048×2048 の透明）。いま出ている津波の**予報区ごとの段階の色**で、沿岸の線をなぞる（`大津波警報`＝`level4` 紫・`津波警報`＝`level3` 赤・`津波注意報`＝`level2` 黄・`津波予報（若干の海面変動）`＝白っぽい細い線）。出ていないときは透明
   - `rain.json`：`{ "version": 1, "at": "…", "to": "…", "frames": 12, "step": 5 }`（画像のコマの時刻）
   - **範囲・図法は下地の日本地図と同じ**（設計書 5.2.2）：Web メルカトル、緯度 23.5〜46.0・経度 120.86〜148.6、2048×2048。南鳥島・沖ノ鳥島は範囲の外
-  - **市区町村の形**：気象庁は一次細分区域（class10）の形を配っていないので、市区町村（class20）の公式 GeoJSON（`common/const/geojson/class20s/<コード>.json`）を `scripts/build_areas.py` で1つにまとめて `data/class20s.json` に置いてある（1805件・2.2MB。区域の区切りが変わったら作り直す）
-  - **津波の沿岸（`tsunami.png`）は未着手**：津波予報区の形が公開されていない（市区町村から作るには「津波予報区→市区町村」の対応表が要る）。津波はバナー・通知・一覧で伝わるので後回し
+  - **区域の形は気象庁の公式 GeoJSON をそのまま使う**（毎回取る。リポジトリには置かない）：警報は `common/const/geojson/class10s.json`（一次細分区域 153件）、津波は `common/const/geojson/tsunami.json`（津波予報区 66件の**沿岸の線**）
   - **回数の注意**：画像を置くたびに Pages のビルドが1回走る。30分おき＝2回/時で、共通 feed（最大8回/時）と合わせて「1時間に10回」の目安に収める。短くするなら、画像専用のリポジトリ（別の Pages）に分ける
   - **ぶつかったとき**：Worker と Actions が同じ `pages` ブランチを書き換えるので、Actions は取ってから push を繰り返す（負けたほうは次に作り直される。雨雲は30分、feed は次の回）
 
@@ -233,8 +233,7 @@ npm test
 地図の画像は Python（Pillow）で作る。`--check` を付けると、下地の陸に重ねた確認用の画像も作る（`scripts/` は Actions と同じもの。手元で1回動かして見た目を確かめられる）。
 
 ```bash
-python scripts/build_areas.py                     # data/class20s.json を作り直す（区域の区切りが変わったとき）
-python scripts/map_images.py --out dist --check   # dist/ に rain-frames.png・rain.json・warn.png と確認用の画像
+python scripts/map_images.py --out dist --check   # dist/ に rain-frames.png・rain.json・warn.png・tsunami.png と確認用の画像
 node scripts/build_timezones.mjs --out dist       # dist/ に timezones.json（時差の表）
 ```
 
