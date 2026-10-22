@@ -112,7 +112,7 @@ METAR アプリが10分おきに読む。**日本の空港 38 件**の METAR（�
 - **データ**：米国 NOAA の Aviation Weather Center の Data API（キー不要）。**METAR と TAF で1回ずつ**、**空港コードを並べて1回で取る**（`format=json`。`hours` は付けない＝付けると報告が複数返り、多いときに取りこぼす）。エンドポイントごとに1分1回までの決まりに収まる。独自の User-Agent を名乗る
 - **空港は固定**（`src/metar.js` の `AIRPORTS`。日本の主要 38 件。名称は日本語・英語の短い名前と正式名）。共通サーバーはワールドごとの設定を知らないので、制作者が追加できるのはこの中のコードだけ。増やすときは `AIRPORTS` に足す（ICAO コード・名前・正式名）
 - **METAR の読み解き**（`readMetar`）：電文そのままの `raw` と、画面の見本のように `[ ]` で区切った `marked`（`METAR RJTT [181200Z] [34008KT] … NOSIG`。最初の2語と `BECMG`・`TEMPO`・`NOSIG` などは囲まない）に加えて、
-  - `wind`：`dir`（度）・`kt`・`gust`・`variable`（VRB）・`nameJa`（北北西）・`nameEn`（NNW）・`calm`
+  - `wind`：`dir`（度）・`kt`・`gust`・`variable`（VRB）・`nameJa`（北北西）・`nameEn`（NNW）・`calm`・**`textJa`／`textEn`**（画面にそのまま出せる文。`340° 8kt`・`340° 8kt（突風 15kt）`／`340° 8kt (gusts 15kt)`・`VRB 3kt`・`静穏`／`Calm`。部品ごとの条件分岐ができないので、突風・風向不定・静穏はここで1つにまとめる）
   - `vis`：`m`（メートル。9999 と CAVOK は 10000）・`over`（以上）・`textJa`（10km以上・1.2km・800m）
   - `clouds`：低い順に `cover`（FEW/SCT/BKN/OVC/VV）・`base`（ft）・`code`（FEW030）・`textJa`（少し 3,000ft）
   - `wx`：天気（`code`・`textJa`（弱いにわか雨）・`textEn`）。なければ `null`
@@ -190,7 +190,7 @@ METAR アプリが10分おきに読む。**日本の空港 38 件**の METAR（�
     "lat": 35.553, "lon": 139.781, "at": "2026-10-21T00:00:00+09:00", "atZ": "2026-10-20T15:00:00Z", "fltCat": "VFR",
     "metar": { "raw": "METAR RJTT 201500Z 34008KT 9999 FEW030 18/09 Q1021 NOSIG",
       "marked": "METAR RJTT [201500Z] [34008KT] [9999] [FEW030] [18/09] [Q1021] NOSIG",
-      "wind": { "dir": 340, "kt": 8, "gust": null, "variable": false, "nameJa": "北北西", "nameEn": "NNW", "calm": false },
+      "wind": { "dir": 340, "kt": 8, "gust": null, "variable": false, "nameJa": "北北西", "nameEn": "NNW", "calm": false, "textJa": "340° 8kt", "textEn": "340° 8kt" },
       "vis": { "m": 10000, "over": true, "textJa": "10km以上", "textEn": "10 km or more" },
       "clouds": [ { "cover": "FEW", "base": 3000, "code": "FEW030", "textJa": "少し 3,000ft", "textEn": "Few 3,000 ft" } ],
       "wx": null, "tempC": 18, "dewpC": 9, "qnh": 1021, "qnhInHg": 30.15, "fltCat": "VFR", "obsTime": "2015Z" },

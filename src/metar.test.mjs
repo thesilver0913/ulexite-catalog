@@ -60,7 +60,10 @@ assert.equal(flightCategory(10000, 5000), "VFR");
 // 電文の読み解き（設計の見本と同じ形：羽田）
 const t = readMetar("METAR RJTT 201500Z 34008KT 9999 FEW030 18/09 Q1021 NOSIG");
 assert.equal(t.marked, "METAR RJTT [201500Z] [34008KT] [9999] [FEW030] [18/09] [Q1021] NOSIG", "見本のように [ ] で区切る");
-assert.deepEqual(t.wind, { dir: 340, kt: 8, gust: null, variable: false, nameJa: "北北西", nameEn: "NNW", calm: false });
+assert.deepEqual(t.wind, {
+  dir: 340, kt: 8, gust: null, variable: false, nameJa: "北北西", nameEn: "NNW", calm: false,
+  textJa: "340° 8kt", textEn: "340° 8kt",
+});
 assert.equal(t.vis.textJa, "10km以上");
 assert.equal(t.clouds[0].textJa, "少し 3,000ft");
 assert.equal(t.clouds[0].code, "FEW030");
@@ -75,6 +78,8 @@ assert.equal(t.obsTime, "2015Z");
 // 雨・霧・風向不定も読む
 const rain = readMetar("METAR RJTT 201500Z 34008G18KT 360V070 1200 -SHRA BR BKN008 OVC015 18/17 Q1008");
 assert.equal(rain.wind.gust, 18);
+assert.equal(rain.wind.textJa, "340° 8kt（突風 18kt）", "突風は文に入れる（部品ごとの条件分岐ができないため）");
+assert.equal(rain.wind.textEn, "340° 8kt (gusts 18kt)");
 assert.equal(rain.vis.textJa, "1.2km");
 assert.equal(rain.wx.textJa, "弱いにわか雨");
 assert.equal(rain.fltCat, "LIFR", "天井 800ft で IFR、視程 1.2km（0.75マイル）で LIFR");
@@ -82,6 +87,10 @@ assert.equal(rain.obsTime, "2015Z");
 const fog = readMetar("METAR RJAA 201500Z VRB02KT 0800 FG VV002 12/12 Q1005");
 assert.equal(fog.wind.variable, true);
 assert.equal(fog.wind.nameJa, "風向不定");
+assert.equal(fog.wind.textJa, "VRB 2kt", "風向不定は VRB と出す（0° にしない）");
+const calm = readMetar("METAR RJAA 201500Z 00000KT 9999 FEW030 20/10 Q1015");
+assert.equal(calm.wind.textJa, "静穏");
+assert.equal(calm.wind.textEn, "Calm");
 assert.equal(fog.vis.textJa, "800m");
 assert.equal(fog.clouds[0].cover, "VV");
 assert.equal(fog.wx.textJa, "霧");

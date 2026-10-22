@@ -77,6 +77,20 @@ export function parseWind(token) {
   return { dir: variable ? null : Number(m[1]), kt: Number(m[2]), gust: m[3] ? Number(m[3]) : null, variable };
 }
 
+/**
+ * 画面にそのまま出せる風の文。突風・風向不定（VRB）・静穏をここで1つにまとめる
+ * （部品ごとの条件分岐ができないので、サーバーで文にして渡す）。
+ * 例："340° 8kt" / "VRB 3kt" / "340° 8kt（突風 15kt）" / "静穏"
+ */
+export function windText(w) {
+  if (!w) return { textJa: "", textEn: "" };
+  const gustJa = w.gust ? `（突風 ${w.gust}kt）` : "";
+  const gustEn = w.gust ? ` (gusts ${w.gust}kt)` : "";
+  if (w.kt === 0) return { textJa: "静穏", textEn: "Calm" };
+  if (w.variable) return { textJa: `VRB ${w.kt}kt${gustJa}`, textEn: `VRB ${w.kt}kt${gustEn}` };
+  return { textJa: `${w.dir}° ${w.kt}kt${gustJa}`, textEn: `${w.dir}° ${w.kt}kt${gustEn}` };
+}
+
 /** 視程の電文 → メートル（"9999" と "CAVOK" は 10000 以上）。 */
 export function parseVisibility(token) {
   if (!token) return null;
@@ -217,6 +231,7 @@ export function readMetar(raw, meta = {}) {
       dir: wind.dir, kt: wind.kt, gust: wind.gust, variable: wind.variable,
       nameJa: wind.variable ? "風向不定" : dir?.ja ?? "", nameEn: wind.variable ? "Variable" : dir?.en ?? "",
       calm: wind.kt === 0,
+      ...windText(wind), // 画面にそのまま出せる文（突風・風向不定を含む）
     } : null,
     vis: vis ? { m: vis.m, over: !!vis.over, textJa: visibilityText(vis).ja, textEn: visibilityText(vis).en } : null,
     clouds: cloudsOut,
