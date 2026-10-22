@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import {
   AIRPORTS, dirName, parseWind, parseVisibility, visibilityText, parseWeather, parseCloud,
-  ceilingOf, flightCategory, readMetar, buildMetar,
+  ceilingOf, flightCategory, readMetar, buildMetar, markGroups,
 } from "./metar.js";
 
 // 風向の16方位
@@ -59,7 +59,7 @@ assert.equal(flightCategory(10000, 5000), "VFR");
 
 // 電文の読み解き（設計の見本と同じ形：羽田）
 const t = readMetar("METAR RJTT 201500Z 34008KT 9999 FEW030 18/09 Q1021 NOSIG");
-assert.deepEqual(t.parts, ["METAR", "RJTT", "201500Z", "34008KT", "9999", "FEW030", "18/09", "Q1021", "NOSIG"]);
+assert.equal(t.marked, "METAR RJTT [201500Z] [34008KT] [9999] [FEW030] [18/09] [Q1021] NOSIG", "見本のように [ ] で区切る");
 assert.deepEqual(t.wind, { dir: 340, kt: 8, gust: null, variable: false, nameJa: "北北西", nameEn: "NNW", calm: false });
 assert.equal(t.vis.textJa, "10km以上");
 assert.equal(t.clouds[0].textJa, "少し 3,000ft");
@@ -117,6 +117,11 @@ assert.ok(JSON.stringify(buildMetar(rows, [])).length < 100000, "100KB 未満");
 // TAF は電文と発行時刻だけ持つ
 const withTaf = buildMetar([], [{ icaoId: "RJTT", rawTAF: "TAF RJTT 201105Z 2012/2118 30006KT 9999 FEW020", issueTime: "2026-10-20T11:05:00.000Z" }]);
 assert.equal(withTaf.airports[0].taf.raw, "TAF RJTT 201105Z 2012/2118 30006KT 9999 FEW020");
-assert.deepEqual(withTaf.airports[0].taf.parts.slice(0, 3), ["TAF", "RJTT", "201105Z"]);
+assert.equal(withTaf.airports[0].taf.marked, "TAF RJTT [201105Z] [2012/2118] [30006KT] [9999] [FEW020]");
+// BECMG などの変わり目の言葉は [ ] で囲まない（設計の見本と同じ）
+assert.equal(
+  markGroups("TAF RJTT 181100Z 1812/1918 34010KT 9999 FEW030 BECMG 1900/1903 18006KT".split(" ")),
+  "TAF RJTT [181100Z] [1812/1918] [34010KT] [9999] [FEW030] BECMG [1900/1903] [18006KT]",
+);
 assert.equal(withTaf.airports[0].taf.at, "2026-10-20T11:05:00.000Z");
 console.log("ok");

@@ -176,6 +176,17 @@ export function flightCategory(visM, ceilingFt) {
   return "VFR";
 }
 
+// 変わり目の言葉（この語そのものは [ ] で囲まない）
+const TREND = /^(NOSIG|BECMG|TEMPO|INTER|RMK|CNL|AMD|COR|PROB\d{2})$/;
+
+/**
+ * 電文を、画面の見本のように [ ] で区切る。
+ * 最初の2語（METAR／TAF と空港コード）と、変わり目の言葉（BECMG など）はそのまま。
+ */
+export function markGroups(tokens) {
+  return (tokens ?? []).map((t, i) => (i < 2 || TREND.test(t) ? t : `[${t}]`)).join(" ");
+}
+
 const PAD2 = (n) => String(n).padStart(2, "0");
 const isoJst = (sec) => new Date((sec + 9 * 3600) * 1000).toISOString().replace("Z", "+09:00").replace(/\.\d+/, "");
 const isoZ = (sec) => new Date(sec * 1000).toISOString().replace(/\.\d+/, "");
@@ -201,7 +212,7 @@ export function readMetar(raw, meta = {}) {
   const cloudsOut = clouds.map(({ cover, base, code, ja, en }) => ({ cover, base, code, textJa: ja, textEn: en }));
   return {
     raw: clean(raw, 300),
-    parts: tokens.map((t) => clean(t, 40)),
+    marked: markGroups(tokens.map((t) => clean(t, 40))), // 画面の見本のように [ ] で区切ったもの
     wind: wind ? {
       dir: wind.dir, kt: wind.kt, gust: wind.gust, variable: wind.variable,
       nameJa: wind.variable ? "風向不定" : dir?.ja ?? "", nameEn: wind.variable ? "Variable" : dir?.en ?? "",
@@ -236,7 +247,7 @@ export function buildEntry(airport, row, tafRow, now = Date.now()) {
     atZ: obsSec ? isoZ(obsSec) : null,
     fltCat: body?.fltCat ?? null,
     metar: body,
-    taf: tafRow ? { raw: clean(tafRow.rawTAF, 600), parts: String(tafRow.rawTAF ?? "").trim().split(/\s+/).map((t) => clean(t, 40)), at: tafRow.issueTime ?? null } : null,
+    taf: tafRow ? { raw: clean(tafRow.rawTAF, 600), marked: markGroups(clean(tafRow.rawTAF, 600).split(/\s+/)), at: tafRow.issueTime ?? null } : null,
   };
 }
 
