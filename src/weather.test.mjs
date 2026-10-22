@@ -1,9 +1,18 @@
 // node src/weather.test.mjs で確認する（気象庁には繋がない）
 import assert from "node:assert/strict";
-import { buildDays, buildSun, buildMoon, moonPhases, dayPhase, buildArea } from "./weather.js";
+import { buildDays, buildSun, buildMoon, moonPhases, dayPhase, buildArea, wxTextEn } from "./weather.js";
 import { jobsAt } from "./index.js";
 
 const now = Date.parse("2026-10-20T21:00:00+09:00");
+
+// 天気の文の英訳（気象庁の文の語を1つずつ訳して組み立てる。実際の文で確かめる）
+assert.equal(wxTextEn("くもり"), "Cloudy");
+assert.equal(wxTextEn("晴れ　朝晩　くもり"), "Sunny, cloudy in the morning and evening");
+assert.equal(wxTextEn("くもり　所により　夜　雨"), "Cloudy, in places rain at night");
+assert.equal(wxTextEn("くもり　夕方　から　雨"), "Cloudy, rain from the evening");
+assert.equal(wxTextEn("雨　時々　くもり"), "Rain, occasionally cloudy");
+assert.equal(wxTextEn("雨　所により　雷を伴い　激しく　降る"), "Rain, in places, with thunder, heavily");
+assert.equal(wxTextEn(""), "");
 
 // 東京（2026-10-20）：国立天文台の暦で日の出 5:51・日の入り 17:03 前後
 const sun = buildSun(now, 35.6917, 139.75);
@@ -47,7 +56,7 @@ const area = buildArea(forecast, { code: "44132", name: "東京", nameEn: "Tokyo
   { "44132": { temp: [21.7, 0] } }, "2026-10-20T21:40:00+09:00", now, phases);
 assert.equal(area.version, 1);
 assert.equal(area.updatedAt, "2026-10-20T17:00:00+09:00");
-assert.deepEqual(area.current, { temp: 21.7, at: "2026-10-20T21:40:00+09:00", wx: "200", wxCode: "200", wxText: "くもり 所により 夜 雨" });
+assert.deepEqual(area.current, { temp: 21.7, at: "2026-10-20T21:40:00+09:00", wx: "200", wxCode: "200", wxText: "くもり 所により 夜 雨", wxTextEn: "Cloudy, in places rain at night" });
 assert.equal(buildArea(forecast, { code: "1", lat: 35, lon: 139 }, { "1": { temp: [9, 5] } }, "", now, phases).current.temp, null, "品質が悪い値は出さない");
 
 // 気温はその地点のものだけ（ほかの地点の週間の気温は使わない）

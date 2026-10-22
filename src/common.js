@@ -11,7 +11,7 @@ export const LATEST_TV_VERSION = "0.2.0";
  * この feed の中身の作り方の版。作り方を変えたら上げる。
  * 気象庁のデータが変わっていなくても、次の実行で作り直して書き出す（デプロイしただけでは書き出されない、を防ぐ）。
  */
-export const COMMON_BUILD = "3";
+export const COMMON_BUILD = "4";
 
 const JMA = "https://www.jma.go.jp/bosai";
 const MAX_QUAKES = 10;
@@ -60,8 +60,10 @@ export function buildQuake(e, detail) {
     areas: [],
   };
   for (const pref of detail?.Body?.Intensity?.Observation?.Pref ?? [])
-    for (const a of pref.Area ?? []) q.areas.push({ r: intRank(a.MaxInt), int: intText(a.MaxInt), name: clean(a.Name, 40) });
-  q.areas = q.areas.sort((a, b) => b.r - a.r).slice(0, MAX_AREAS).map(({ int, name }) => ({ int, name }));
+    for (const a of pref.Area ?? [])
+      q.areas.push({ r: intRank(a.MaxInt), int: intText(a.MaxInt), name: clean(a.Name, 40), nameEn: clean(a.enName, 60) });
+  q.areas = q.areas.sort((a, b) => b.r - a.r).slice(0, MAX_AREAS)
+    .map(({ int, name, nameEn }) => (nameEn ? { int, name, nameEn } : { int, name }));
   return q;
 }
 
@@ -94,18 +96,30 @@ export function buildTsunami(active, detail) {
 
 // ---- 気象の警報・注意報（2026年5月からの新しい防災気象情報。warning/data/r8/） ----
 
-// 気象庁の警報の種類のコード → 名前・段階（気象庁の警報のページの表を写したもの）
-const W = (name, lv) => ({ name, lv });
+// 気象庁の警報の種類のコード → 名前（日本語・英語）・段階（気象庁の警報のページの表を写したもの）
+// 英語はこちらで訳したもの（気象庁の公式の英文の転載ではない）。特別警報＝Emergency Warning・危険警報＝Danger Warning・
+// 警報＝Warning・注意報＝Advisory。大雨・土砂災害・高潮にはレベルの番号が付く。
+const W = (name, nameEn, lv) => ({ name, nameEn, lv });
 export const WARNING_KINDS = {
-  "33": W("レベル5大雨特別警報", 5), "43": W("レベル4大雨危険警報", 4), "03": W("レベル3大雨警報", 3), "10": W("レベル2大雨注意報", 2),
-  "39": W("レベル5土砂災害特別警報", 5), "49": W("レベル4土砂災害危険警報", 4), "09": W("レベル3土砂災害警報", 3), "29": W("レベル2土砂災害注意報", 2),
-  "38": W("レベル5高潮特別警報", 5), "48": W("レベル4高潮危険警報", 4), "08": W("レベル3高潮警報", 3), "19": W("レベル2高潮注意報", 2),
-  "35": W("暴風特別警報", 5), "05": W("暴風警報", 3), "15": W("強風注意報", 2),
-  "32": W("暴風雪特別警報", 5), "02": W("暴風雪警報", 3), "13": W("風雪注意報", 2),
-  "36": W("大雪特別警報", 5), "06": W("大雪警報", 3), "12": W("大雪注意報", 2),
-  "37": W("波浪特別警報", 5), "07": W("波浪警報", 3), "16": W("波浪注意報", 2),
-  "14": W("雷注意報", 2), "17": W("融雪注意報", 2), "20": W("濃霧注意報", 2), "21": W("乾燥注意報", 2), "22": W("なだれ注意報", 2),
-  "23": W("低温注意報", 2), "24": W("霜注意報", 2), "25": W("着氷注意報", 2), "26": W("着雪注意報", 2),
+  "33": W("レベル5大雨特別警報", "Level 5 Heavy Rain Emergency Warning", 5),
+  "43": W("レベル4大雨危険警報", "Level 4 Heavy Rain Danger Warning", 4),
+  "03": W("レベル3大雨警報", "Level 3 Heavy Rain Warning", 3),
+  "10": W("レベル2大雨注意報", "Level 2 Heavy Rain Advisory", 2),
+  "39": W("レベル5土砂災害特別警報", "Level 5 Landslide Emergency Warning", 5),
+  "49": W("レベル4土砂災害危険警報", "Level 4 Landslide Danger Warning", 4),
+  "09": W("レベル3土砂災害警報", "Level 3 Landslide Warning", 3),
+  "29": W("レベル2土砂災害注意報", "Level 2 Landslide Advisory", 2),
+  "38": W("レベル5高潮特別警報", "Level 5 Storm Surge Emergency Warning", 5),
+  "48": W("レベル4高潮危険警報", "Level 4 Storm Surge Danger Warning", 4),
+  "08": W("レベル3高潮警報", "Level 3 Storm Surge Warning", 3),
+  "19": W("レベル2高潮注意報", "Level 2 Storm Surge Advisory", 2),
+  "35": W("暴風特別警報", "Storm Emergency Warning", 5), "05": W("暴風警報", "Storm Warning", 3), "15": W("強風注意報", "Strong Wind Advisory", 2),
+  "32": W("暴風雪特別警報", "Snowstorm Emergency Warning", 5), "02": W("暴風雪警報", "Snowstorm Warning", 3), "13": W("風雪注意報", "Wind and Snow Advisory", 2),
+  "36": W("大雪特別警報", "Heavy Snow Emergency Warning", 5), "06": W("大雪警報", "Heavy Snow Warning", 3), "12": W("大雪注意報", "Heavy Snow Advisory", 2),
+  "37": W("波浪特別警報", "High Waves Emergency Warning", 5), "07": W("波浪警報", "High Waves Warning", 3), "16": W("波浪注意報", "High Waves Advisory", 2),
+  "14": W("雷注意報", "Thunderstorm Advisory", 2), "17": W("融雪注意報", "Snowmelt Advisory", 2), "20": W("濃霧注意報", "Dense Fog Advisory", 2),
+  "21": W("乾燥注意報", "Dry Air Advisory", 2), "22": W("なだれ注意報", "Avalanche Advisory", 2), "23": W("低温注意報", "Low Temperature Advisory", 2),
+  "24": W("霜注意報", "Frost Advisory", 2), "25": W("着氷注意報", "Ice Accretion Advisory", 2), "26": W("着雪注意報", "Snow Accretion Advisory", 2),
 };
 const LEVEL_NAME = { 5: "special", 4: "danger", 3: "warning", 2: "advisory" };
 
@@ -151,7 +165,7 @@ export function buildWarnings(reports, area) {
       .map(([kind, codes]) => ({ w: WARNING_KINDS[kind], codes: [...codes].sort() }))
       .sort((a, b) => b.w.lv - a.w.lv)
       .map(({ w, codes }) => {
-        const item = { name: w.name, level: LEVEL_NAME[w.lv] };
+        const item = { name: w.name, nameEn: w.nameEn, level: LEVEL_NAME[w.lv] };
         const total = areasInOffice.get(office) ?? 0; // 0 は区域の表にない（分からない）とき
         // 府県の一部の区域だけのときだけ、区域の名前を添える（府県全体・分からないときは添えない）
         if (total && codes.length < total) {

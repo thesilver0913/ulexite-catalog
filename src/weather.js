@@ -97,6 +97,63 @@ export function buildSun(now, lat, lon) {
 const num = (s) => (s === "" || s == null || isNaN(Number(s)) ? null : Number(s));
 /** 天気のコード（"201" など）→ 大まかな天気（"200"。1 晴れ・2 くもり・3 雨・4 雪）。元のコードは wxCode に残す。 */
 const wxMain = (code) => (/^[1-4]\d\d$/.test(code ?? "") ? code[0] + "00" : "");
+
+// ---- 天気の文の英訳（気象庁の文は「晴れ　朝晩　くもり」のように語を空白で区切る） ----
+
+const WX_WORD = [["雨か雪", "rain or snow"], ["雨か晴れ", "rain or sunny"], ["晴れ", "sunny"], ["くもり", "cloudy"], ["雨", "rain"], ["雪", "snow"]];
+// [語, そのままの形, 〜から, 〜まで]
+const WX_TIME = [
+  ["夜のはじめ頃", "early at night", "from early at night", "until early at night"],
+  ["昼過ぎ", "in the afternoon", "from the afternoon", "until the afternoon"],
+  ["朝晩", "in the morning and evening", "from the morning", "until the evening"],
+  ["明け方", "at dawn", "from dawn", "until dawn"],
+  ["未明", "before dawn", "from before dawn", "until before dawn"],
+  ["夕方", "in the evening", "from the evening", "until the evening"],
+  ["朝", "in the morning", "from the morning", "until the morning"],
+  ["昼", "in the daytime", "from the daytime", "until the daytime"],
+  ["夜", "at night", "from night", "until night"],
+];
+const WX_CONN = { "時々": "occasionally", "一時": "temporarily", "のち": "then", "所により": "in places" };
+
+/**
+ * 気象庁の天気の文（「くもり　所により　夜　雨」）を英語にする。
+ * 語を1つずつ訳して、天気・時制・接続を組み立てる（気象庁の英文の転載ではなく、こちらで訳したもの）。
+ */
+export function wxTextEn(text) {
+  const tokens = String(text ?? "").replace(/\u3000/g, " ").trim().split(/\s+/).filter(Boolean);
+  const clauses = [];
+  let conn = "", time = "";
+  const addModifier = (s) => {
+    if (!clauses.length) { clauses.push(s); return; }
+    if (conn) { clauses.push(conn); conn = ""; } // 「所により　雷を伴い」→「雨, in places, with thunder」
+    clauses[clauses.length - 1] += ", " + s;
+  };
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    const w = WX_WORD.find(([k]) => k === t);
+    if (w) {
+      clauses.push((conn ? conn + " " : "") + w[1] + (time ? " " + time : ""));
+      conn = ""; time = "";
+      continue;
+    }
+    const tm = WX_TIME.find(([k]) => k === t);
+    if (tm) {
+      const next = tokens[i + 1];
+      time = next === "から" ? tm[2] : next === "まで" ? tm[3] : tm[1];
+      if (next === "から" || next === "まで") i++;
+      continue;
+    }
+    if (WX_CONN[t]) { conn = WX_CONN[t]; continue; }
+    if (t === "雷を伴い" || t === "雷を伴う") { addModifier("with thunder"); continue; }
+    if (t === "雷" && (tokens[i + 1] === "を伴う" || tokens[i + 1] === "を伴い")) { addModifier("with thunder"); i++; continue; }
+    if (t === "激しく") { addModifier("heavily"); continue; }
+    if (t === "強く") { addModifier("strongly"); continue; }
+    // 「で」「を伴う」「降る」など、英語にしなくてよい語は落とす
+  }
+  const s = clauses.join(", ");
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+}
+
 const pickArea = (ts, areas) => ts.areas.find((a) => areas?.has(a.area?.code)) ?? ts.areas[0];
 const stationArea = (ts, station) => (station ? ts.areas.find((a) => a.area?.code === station) : ts.areas[0]);
 
@@ -157,6 +214,7 @@ export function buildArea(forecast, station, obs, obsAt, now = Date.now(), phase
   const sa = sw && pickArea(sw, areas);
   const code = sa?.weatherCodes?.[0] ?? "";
   const temp = obs?.[station.code]?.temp;
+  const wxText = clean(sa?.weathers?.[0], 60).replace(/　/g, " ");
   return {
     version: 1,
     updatedAt: short?.reportDatetime ?? "",
@@ -164,7 +222,8 @@ export function buildArea(forecast, station, obs, obsAt, now = Date.now(), phase
       temp: temp && temp[1] === 0 ? temp[0] : null, // [値, 品質]。0 が正常
       at: obsAt,
       wx: wxMain(code), wxCode: code,
-      wxText: clean(sa?.weathers?.[0], 60).replace(/　/g, " "),
+      wxText,
+      wxTextEn: wxTextEn(wxText), // 気象庁の文をこちらで訳したもの（英語の表示用）
     },
     days: buildDays(forecast, now, areas, station.code),
     sun: buildSun(now, station.lat, station.lon),
