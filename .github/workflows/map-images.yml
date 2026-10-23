@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
+  # 表の形（src/common.js）やスクリプトを変えたときは、次の30分を待たずにすぐ作って壊れていないか確かめる
+  push:
+    paths:
+      - "src/common.js"
+      - "scripts/map_images.py"
+      - ".github/workflows/map-images.yml"
 
 permissions:
   contents: write

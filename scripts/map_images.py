@@ -131,7 +131,8 @@ def warning_levels():
     """種類のコード → 段階（src/common.js の WARNING_KINDS をそのまま使う。表を2つ持たない）。"""
     here = os.path.dirname(os.path.abspath(__file__))
     src = open(os.path.join(here, "..", "src", "common.js"), encoding="utf-8").read()
-    table = dict(re.findall(r'"(\d\d)":\s*W\("[^"]+",\s*(\d)\)', src))
+    # W("名前", 段階) と W("名前", "英語の名前", 段階) の両方を読む（英語は 2026/10/22 に足した）
+    table = dict(re.findall(r'"(\d\d)":\s*W\("[^"]+"(?:,\s*"[^"]*")?,\s*(\d)\)', src))
     if len(table) < 20:
         raise SystemExit("src/common.js の WARNING_KINDS を読めませんでした")
     return {code: int(lv) for code, lv in table.items()}
