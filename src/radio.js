@@ -108,8 +108,8 @@ const concat = (chunks) => {
 };
 const latin1 = (bytes) => [...bytes].map((b) => String.fromCharCode(b)).join("");
 
-/** 配信の先頭から ICY メタデータを1つ読む（音声は捨てる）。読めなければ null。 */
-export async function readIcyTitle(url, fetchImpl = fetch) {
+/** 配信の先頭から ICY メタデータを1つ読む（音声は捨てる）。読めなければ null。diag に何が起きたかを残す。 */
+export async function readIcyTitle(url, fetchImpl = fetch, diag = null) {
   let res;
   try {
     res = await fetchImpl(url, {
@@ -117,28 +117,73 @@ export async function readIcyTitle(url, fetchImpl = fetch) {
       redirect: "follow",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-  } catch { return null; }
-  if (!res || !res.ok || !res.body) return null;
-  const metaint = Number(res.headers.get("icy-metaint") ?? 0);
-  if (!(metaint > 0 && metaint <= 1 << 20)) return null;
+  } catch (e) {
+    if (diag) diag.error = e.message;
+    console.log(`radio: fetch failed ${url}: ${e.message}`);
+    return null;
+  }
+  if (!res || !res.ok || !res.body) {
+    if (diag) diag.status = res?.status ?? 0;
+    console.log(`radio: no stream ${url}: ${res?.status}`);
+    return null;
+  }
   const reader = res.body.getReader();
   const chunks = [];
   let len = 0;
+  const readMore = async (upTo) => {
+    const { value, done } = await reader.read();
+    if (done) return false;
+    chunks.push(value); len += value.length;
+    return len < upTo;
+  };
   try {
-    // 音声 metaint バイト + 長さ1バイト + メタデータ（最大 16×255）まで読む
-    const need = metaint + 1;
-    while (len < need) {
-      const { value, done } = await reader.read();
-      if (done) return null;
-      chunks.push(value); len += value.length;
-      if (len > need + 16 * 255 + 16) break;
+    const metaint = Number(res.headers.get("icy-metaint") ?? 0);
+    if (diag) { diag.status = res.status; diag.metaint = metaint; }
+    if (metaint > 0 && metaint <= 1 << 20) {
+      // 音声 metaint バイト + 長さ1バイト まで読み、長さのぶんだけメタデータを読む
+      const need = metaint + 1;
+      while (len < need) if (!(await readMore(need + 16 * 255 + 16))) break;
+      let bytes = concat(chunks);
+      if (diag) { diag.bytes = bytes.length; diag.metaLenByte = bytes[metaint] ?? -1; }
+      if (bytes.length < need) return null;
+      const metaLen = bytes[metaint] * 16;
+      if (metaLen) {
+        const want = need + metaLen; // メタデータの本体（StreamTitle など）まで読む
+        while (len < want) if (!(await readMore(want + 16))) break;
+        bytes = concat(chunks);
+        if (diag) diag.bytes = bytes.length;
+        if (bytes.length >= want) return parseStreamTitle(latin1(bytes.subarray(need, want)));
+      }
+      // 区切りの位置がずれている・中身が別物のことがあるので、届いた範囲から StreamTitle を探す
+      const s = latin1(bytes);
+      const i = s.indexOf("StreamTitle='");
+      if (diag) diag.foundAt = i;
+      if (i >= 0) {
+        const end = s.indexOf("';", i + 13);
+        if (end > 0) { if (diag) diag.block = s.slice(i, end + 2); return parseStreamTitle(s.slice(i, end + 2)); }
+      }
+      return { artist: "", title: "" };
     }
-    const bytes = concat(chunks);
-    if (bytes.length < need) return null;
-    const metaLen = bytes[metaint] * 16;
-    if (!metaLen) return { artist: "", title: "" };
-    return parseStreamTitle(latin1(bytes.subarray(need, need + metaLen)));
-  } catch { return null; } finally { try { await reader.cancel(); } catch {} }
+
+    // icy-metaint が無い（Cloudflare が落とすことがある）ときは、音声の並びから
+    // StreamTitle='…' を探す（見つからなければ読めない局として扱う）
+    console.log(`radio: no icy-metaint ${url} (${res.status})`);
+    const scanMax = 200_000;
+    while (len < scanMax) {
+      const s = latin1(concat(chunks));
+      const i = s.indexOf("StreamTitle='");
+      if (i >= 0) {
+        const end = s.indexOf("';", i + 13);
+        if (end > 0) { if (diag) { diag.bytes = len; diag.found = true; } return parseStreamTitle(s.slice(i, end + 2)); }
+      }
+      if (!(await readMore(scanMax))) break;
+    }
+    return null;
+  } catch (e) {
+    if (diag) diag.error = e.message;
+    console.log(`radio: read failed ${url}: ${e.message}`);
+    return null;
+  } finally { try { await reader.cancel(); } catch {} }
 }
 
 /** feed の形。曲名が取れている局だけ出す。 */
@@ -189,17 +234,23 @@ export async function runRadioPoll(env, now = Date.now()) {
     "SELECT key, url FROM radio_stations ORDER BY fetched_at ASC, last_seen DESC LIMIT ?",
   ).bind(PER_POLL).all()).results ?? [];
   let read = 0;
+  const diag = []; // 何が起きたかを残す（曲名が取れない局の切り分け用。D1 の kv に置く）
   for (const row of rows) {
-    const t = await readIcyTitle(row.url);
+    const d = { url: row.url };
+    diag.push(d);
+    const t = await readIcyTitle(row.url, fetch, d);
     const at = new Date().toISOString();
     if (t) {
       await env.DB.prepare("UPDATE radio_stations SET artist = ?, title = ?, fetched_at = ? WHERE key = ?")
         .bind(t.artist, t.title, at, row.key).run();
+      if (t.title) d.ok = true;
       read++;
     } else {
       await env.DB.prepare("UPDATE radio_stations SET fetched_at = ? WHERE key = ?").bind(at, row.key).run();
     }
   }
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
+  await kvSet(env, "radio.diag", JSON.stringify({ at: new Date(now).toISOString(), stations: diag })).run();
   return { ok: true, polled: rows.length, read };
 }
 
