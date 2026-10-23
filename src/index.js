@@ -10,6 +10,7 @@ import { runWeather, runWeatherBatch, publishWeather, BATCHES } from "./weather.
 import { runMap } from "./map.js";
 import { runMetar } from "./metar.js";
 import { handleContact, cleanupReports } from "./contact.js";
+import { runRadioPoll, runRadioPublish, handleRadioRegister } from "./radio.js";
 
 // cron は1分おきの1つだけ（wrangler.toml）。その分にやる仕事をここで決め、順番に動かす。
 // 別々の cron にすると同じ分に並んで動き、Pages のブランチを上書きし合って片方の書き出しが消えるため。
@@ -23,11 +24,16 @@ export function jobsAt(date) {
   if (m === 15 + BATCHES) jobs.push((env) => publishWeather(env));                 // 19分にまとめて書き出す
   if (m % 20 === 5) jobs.push((env) => runMap(env));                                // 天気の地図（20分おき。変わったときだけ書き出す）
   if (m % 10 === 7) jobs.push((env) => runMetar(env));                              // 航空気象（10分おき。変わったときだけ書き出す）
+  if (m % 5 === 4) jobs.push((env) => runRadioPoll(env));                            // ラジオの曲名を読む（5分おき。天気の15〜18分は避ける）
+  if (m % 15 === 4) jobs.push((env) => runRadioPublish(env));                        // ラジオの feed を書き出す（15分おき。変わったときだけ）
   if (h === 4 && m === 30) jobs.push((env) => cleanupReports(env));                 // 不具合の報告の古い行（1年より前）を消す
   return jobs;
 }
 
-const JOBS = { videos: runVideos, common: runCommon, weather: runWeather, map: runMap, metar: runMetar };
+const JOBS = {
+  videos: runVideos, common: runCommon, weather: runWeather, map: runMap, metar: runMetar,
+  radio: runRadioPoll, radiopublish: runRadioPublish,
+};
 
 export default {
   async scheduled(event, env, ctx) {
@@ -41,6 +47,8 @@ export default {
     const url = new URL(request.url);
     // 不具合の報告フォーム（POST と、ブラウザの事前確認の OPTIONS）
     if (url.pathname === "/v1/contact") return handleContact(request, env);
+    // ラジオの局の登録（「テレビを作り直す」ときにエディタから送る）
+    if (url.pathname === "/v1/register/radio") return handleRadioRegister(request, env);
     if (request.method === "POST" && url.pathname === "/run") {
       if (!env.RUN_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.RUN_TOKEN}`)
         return new Response("forbidden", { status: 403 });

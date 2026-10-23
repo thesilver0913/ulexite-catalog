@@ -84,8 +84,10 @@ assert.equal(withQuake.quakePoints.length, 4);
 // 動かす分：天気の地図は20分おき（毎時 5・25・45分）に足す。ほかの仕事の分は変えない
 const at = (m) => jobsAt(new Date(Date.UTC(2026, 9, 20, 12, m)));
 for (const m of [5, 25, 45]) assert.equal(at(m).length, 2, `${m}分は common＋map`);
-for (const m of [1, 4, 6, 20, 30]) assert.equal(at(m).length, 1, `${m}分は common だけ`);
-for (const m of [15, 16, 18, 19]) assert.equal(at(m).length, 2, `${m}分は common＋天気`);
+for (const m of [1, 6, 20, 30]) assert.equal(at(m).length, 1, `${m}分は common だけ`);
+for (const m of [15, 16, 18]) assert.equal(at(m).length, 2, `${m}分は common＋天気`);
+assert.equal(at(19).length, 4, "19分は common＋天気の書き出し＋ラジオ（読む・書き出す）");
+assert.equal(at(4).length, 3, "4分は common＋ラジオ（読む・書き出す）");
 for (const m of [7, 27, 37, 47, 57]) assert.equal(at(m).length, 2, `${m}分は common＋航空気象`);
 assert.equal(at(17).length, 3, "17分だけ common＋天気の読み込み＋航空気象が重なる");
 assert.equal(at(0).length, 1);

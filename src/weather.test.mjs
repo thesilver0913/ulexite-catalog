@@ -67,6 +67,6 @@ const at = (iso) => jobsAt(new Date(iso)).length;
 assert.equal(at("2026-10-20T03:00:00Z"), 1, "動画の分は動画だけ");
 assert.equal(at("2026-10-20T03:01:00Z"), 1);
 assert.equal(at("2026-10-20T03:15:00Z"), 2, "共通の feed＋天気の1組目");
-assert.equal(at("2026-10-20T03:19:00Z"), 2, "共通の feed＋天気の書き出し");
+assert.equal(at("2026-10-20T03:19:00Z"), 4, "共通の feed＋天気の書き出し＋ラジオ（読む・書き出す）");
 assert.equal(at("2026-10-20T03:20:00Z"), 1);
 console.log("ok");

@@ -35,3 +35,15 @@ CREATE TABLE IF NOT EXISTS contact_reports (
   error TEXT NOT NULL DEFAULT '',  -- エラーの内容（任意）
   status TEXT NOT NULL DEFAULT 'new'
 );
+
+-- ラジオの局（POST /v1/register/radio で登録。30日来なければ消す）
+-- key は id があれば id:<stationuuid>、無ければ url:<URL>。曲名は ICY メタデータから読む
+CREATE TABLE IF NOT EXISTS radio_stations (
+  key TEXT PRIMARY KEY,
+  station_id TEXT NOT NULL DEFAULT '',  -- Radio Browser の stationuuid（URL を直接足した局は空）
+  url TEXT NOT NULL,
+  artist TEXT NOT NULL DEFAULT '',      -- 曲名のアーティスト（読めなければ空）
+  title TEXT NOT NULL DEFAULT '',       -- 曲名（読めなければ空＝feed に出さない）
+  fetched_at TEXT NOT NULL DEFAULT '',  -- 最後に曲名を読みに行った時刻
+  last_seen TEXT NOT NULL               -- 最後に登録された時刻（30日で外す）
+);
