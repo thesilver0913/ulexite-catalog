@@ -15,7 +15,13 @@ binding = "DB"
 database_name = "ulexite-catalog"
 database_id = "1a32c3a9-b132-4842-b5b1-aa49bef0a50e"
 
+# 不具合の報告フォームのレート用（IP は保存せず、ソルト付きのハッシュだけを24時間置く）
+[[kv_namespaces]]
+binding = "CONTACT_KV"
+id = "0b4e336d1e9146d6b719afb22d2427f4"
+
 # 秘密の値は wrangler secret put で登録する（このファイルには書かない）
 #   YOUTUBE_API_KEY … YouTube Data API v3 だけに制限したキー
 #   GITHUB_TOKEN    … このリポジトリの Contents だけ読み書きできる fine-grained token
 #   RUN_TOKEN       … 手動で動かすときの合言葉（自分で決めた長い文字列）
+#   CONTACT_SALT    … 不具合の報告の IP のソルト（省くと GITHUB_TOKEN を使う）
