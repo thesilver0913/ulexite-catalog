@@ -21,3 +21,17 @@ CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- 不具合の報告フォーム（POST /v1/contact）で送られたもの。1年で消す（Cron で古い行を削除）
+-- 連絡先は受け取らない。IP は保存しない（レート用のハッシュは KV に24時間だけ）
+CREATE TABLE IF NOT EXISTS contact_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL,              -- bug・request・other
+  version TEXT NOT NULL,           -- Ulexite TV のバージョン
+  env TEXT NOT NULL,               -- pc,quest,vr,desktop のカンマ区切り
+  world TEXT NOT NULL DEFAULT '',  -- ワールド名（任意）
+  body TEXT NOT NULL,              -- 起きたこと
+  error TEXT NOT NULL DEFAULT '',  -- エラーの内容（任意）
+  status TEXT NOT NULL DEFAULT 'new'
+);

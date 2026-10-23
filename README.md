@@ -27,6 +27,7 @@ VRChat ワールド向けのテレビ「Ulexite TV」の共通サーバー。Clo
 | 毎時7・17・27・37・47・57分 | `common`＋`metar`（航空気象。10分おき。変わったときだけ書き出す） |
 | 毎時0・30分（GitHub Actions） | `map` の画像（雨雲のコマ送り・警報の塗り分け）を作って `pages` ブランチに置く |
 | 毎日 4時10分（日本時間 13時10分。GitHub Actions） | `timezones`（時差の表）を作って `pages` ブランチに置く |
+| 毎日 4時30分 | `common`＋不具合の報告の古い行（1年より前）を D1 から消す |
 
 無料プランの「外への読み込みは1回50件まで」に収まるように組んである。仕事を足すときは `src/` にファイルを作り、`jobsAt` と `JOBS`（手動で動かす名前）に足す。
 
@@ -138,6 +139,18 @@ METAR アプリが10分おきに読む。**日本の空港 38 件**の METAR（�
 - **都市**：`key`（保存に使う名前。変えない）・`name`（日本語）・`nameEn`・`zone`（IANA の名前）・`lat`・`lon`。都市を増やすときは `src/timezones.js` の `CITIES` に足す
 - IANA のタイムゾーンデータはパブリックドメイン（出典の表記は要らない）。表の中の `source` にその旨を書いている
 
+## 不具合の報告フォーム（contact）
+
+公式サイトの `contact/index.html`（広報のリポジトリ）から送られる不具合・要望を、Worker で受けて D1 に置く。**返信しない一方向**（種類・バージョン・環境・ワールド・起きたこと・エラーだけ。**連絡先は受け取らない**）。仕様の正本は `docs/sns.md` の「不具合の報告フォーム」。
+
+- **`POST /v1/contact`**（JSON。ブラウザの事前確認の `OPTIONS` も）。CORS は `https://thesilver0913.github.io` と、手元の確認用の `http://localhost:8000` だけ
+- **検証**：`kind`（`bug`・`request`・`other`）・`version`（1〜40字）・`env`（`pc`・`quest`・`vr`・`desktop` の1つ以上）・`world`（200字まで）・`body`（10〜5000字）・`error`（10000字まで）・`consent`（`true`）。外れたら `400 { ok: false, error }`
+- **スパム**：画面に出さない `website` 欄（honeypot）が埋まっていたら、保存せずに `200 { ok: true }`（送れたことにして捨てる）。同じ IP から1時間に5件を超えたら `429`
+  - **IP は保存しない**。レート用に**ソルト付きのハッシュ**だけを `CONTACT_KV`（KV）に24時間置く（ソルトは `CONTACT_SALT`。無ければ `GITHUB_TOKEN` を使う）
+- **保存**：D1 の `contact_reports`（`created_at`・`kind`・`version`・`env`（カンマ区切り）・`world`・`body`・`error`・`status`）。**1年で削除**（毎日 4時30分 UTC の Cron で古い行を消す）
+- **返事**：`200 { ok: true }`・`400`・`429`・`500`（秘密の値は返さない）
+- プライバシーポリシー（`docs/privacy.html`）に「不具合の報告フォーム」の節がある
+
 ## JSON の形式（version 1）
 
 ```jsonc
@@ -210,9 +223,11 @@ METAR アプリが10分おきに読む。**日本の空港 38 件**の METAR（�
 npx wrangler login
 npx wrangler d1 create ulexite-catalog        # 表示された database_id を wrangler.toml に貼る
 npx wrangler d1 execute ulexite-catalog --remote --file=schema.sql
+npx wrangler kv namespace create CONTACT_KV   # 不具合の報告のレート用。表示された id を wrangler.toml の [[kv_namespaces]] に貼る
 npx wrangler secret put YOUTUBE_API_KEY
 npx wrangler secret put GITHUB_TOKEN
 npx wrangler secret put RUN_TOKEN             # 手動で動かすときの合言葉
+# npx wrangler secret put CONTACT_SALT        # 不具合の報告の IP のソルト（省くと GITHUB_TOKEN を使う）
 npx wrangler deploy
 ```
 

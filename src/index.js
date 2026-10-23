@@ -1,12 +1,15 @@
 // Ulexite の共通サーバー。各アプリのデータを作り、GitHub Pages（docs/v1/）に JSON で書き出す。
-// 動画の一覧（videos）・共通の feed（common）・天気（weather）。アプリのカタログなどは、仕事（job）を足して同じ Worker に相乗りさせる。
+// 動画の一覧（videos）・共通の feed（common）・天気（weather）・天気の地図（map）・航空気象（metar）。
+// アプリのカタログなどは、仕事（job）を足して同じ Worker に相乗りさせる。
 // 手動で動かすときは POST /run?job=videos（Authorization: Bearer RUN_TOKEN）。&force を付けると、変わっていなくても書き出す。
+// 不具合の報告フォームの受け口は POST /v1/contact（src/contact.js。サイトから送る）。
 
 import { runVideos } from "./videos.js";
 import { runCommon } from "./common.js";
 import { runWeather, runWeatherBatch, publishWeather, BATCHES } from "./weather.js";
 import { runMap } from "./map.js";
 import { runMetar } from "./metar.js";
+import { handleContact, cleanupReports } from "./contact.js";
 
 // cron は1分おきの1つだけ（wrangler.toml）。その分にやる仕事をここで決め、順番に動かす。
 // 別々の cron にすると同じ分に並んで動き、Pages のブランチを上書きし合って片方の書き出しが消えるため。
@@ -20,6 +23,7 @@ export function jobsAt(date) {
   if (m === 15 + BATCHES) jobs.push((env) => publishWeather(env));                 // 19分にまとめて書き出す
   if (m % 20 === 5) jobs.push((env) => runMap(env));                                // 天気の地図（20分おき。変わったときだけ書き出す）
   if (m % 10 === 7) jobs.push((env) => runMetar(env));                              // 航空気象（10分おき。変わったときだけ書き出す）
+  if (h === 4 && m === 30) jobs.push((env) => cleanupReports(env));                 // 不具合の報告の古い行（1年より前）を消す
   return jobs;
 }
 
@@ -35,6 +39,8 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
+    // 不具合の報告フォーム（POST と、ブラウザの事前確認の OPTIONS）
+    if (url.pathname === "/v1/contact") return handleContact(request, env);
     if (request.method === "POST" && url.pathname === "/run") {
       if (!env.RUN_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.RUN_TOKEN}`)
         return new Response("forbidden", { status: 403 });
