@@ -150,6 +150,7 @@ METAR アプリが10分おきに読む。**日本の空港 38 件**の METAR（�
 - **保存**：D1 の `contact_reports`（`created_at`・`kind`・`version`・`env`（カンマ区切り）・`world`・`body`・`error`・`status`）。**1年で削除**（毎日 4時30分 UTC の Cron で古い行を消す）
 - **返事**：`200 { ok: true }`・`400`・`429`・`500`（秘密の値は返さない）
 - プライバシーポリシー（`docs/privacy.html`）に「不具合の報告フォーム」の節がある
+- 中身を見るとき：`npx wrangler d1 execute ulexite-catalog --remote --command "select * from contact_reports order by id desc limit 20"`。レートの残りは `npx wrangler kv key list --namespace-id <id> --remote`（wrangler 4 の `kv` は `--remote` を付けないと手元の値を見る）
 
 ## JSON の形式（version 1）
 
