@@ -3,7 +3,9 @@
 // アプリのカタログなどは、仕事（job）を足して同じ Worker に相乗りさせる。
 // 手動で動かすときは POST /run?job=videos（Authorization: Bearer RUN_TOKEN）。&force を付けると、変わっていなくても書き出す。
 // 不具合の報告フォームの受け口は POST /v1/contact（src/contact.js。サイトから送る）。
+// 同じ分の仕事の書き出しは1コミットにまとめる（beginBatch / flushBatch。Pages のビルドが重ならないように）。
 
+import { beginBatch, flushBatch } from "./github.js";
 import { runVideos } from "./videos.js";
 import { runCommon } from "./common.js";
 import { runWeather, runWeatherBatch, publishWeather, BATCHES } from "./weather.js";
@@ -38,8 +40,14 @@ const JOBS = {
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
-      for (const job of jobsAt(new Date(event.scheduledTime)))
-        try { await job(env); } catch (e) { console.log(e.message); } // 1つ失敗してもほかは動かす
+      // 同じ分に走る仕事の書き出しは1コミットにまとめる（Pages のビルドが重なって失敗するのを減らす）
+      beginBatch(env);
+      try {
+        for (const job of jobsAt(new Date(event.scheduledTime)))
+          try { await job(env); } catch (e) { console.log(e.message); } // 1つ失敗してもほかは動かす
+      } finally {
+        try { await flushBatch(env); } catch (e) { console.log("publish failed: " + e.message); }
+      }
     })());
   },
 
@@ -54,9 +62,13 @@ export default {
         return new Response("forbidden", { status: 403 });
       const job = JOBS[url.searchParams.get("job") ?? "videos"];
       if (!job) return new Response("unknown job", { status: 404 });
+      beginBatch(env);
       try {
-        return Response.json(await job(env, { force: url.searchParams.has("force") }));
+        const result = await job(env, { force: url.searchParams.has("force") });
+        const flushed = await flushBatch(env);
+        return Response.json({ ...result, published: flushed });
       } catch (e) {
+        try { await flushBatch(env); } catch {}
         return Response.json({ error: e.message }, { status: 500 }); // 秘密の値はメッセージに含めない
       }
     }

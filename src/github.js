@@ -43,8 +43,67 @@ async function listFiles(env, branch, prefix) {
   return files;
 }
 
-/** files（パス → 文字列）を書き出す。パスは Pages のいちばん上から（例：v1/videos/catalog.json）。 */
+/**
+ * files（パス → 文字列）を書き出す。パスは Pages のいちばん上から（例：v1/videos/catalog.json）。
+ * beginBatch のあいだは、実際には書かずに溜める（1回の実行の複数の仕事を1コミットにまとめ、
+ * Pages のビルドが重なって失敗するのを減らす）。まとめたものは flushBatch で書く。
+ */
 export async function publish(env, files, message) {
+  const batch = batches.get(env);
+  if (batch) {
+    for (const [path, text] of Object.entries(files)) batch.files.set(path, text);
+    batch.messages.push(message);
+    return;
+  }
+  await publishNow(env, files, message);
+}
+
+const batches = new WeakMap(); // env → { files: Map, messages: [] }
+
+/** ここから flushBatch まで、publish は溜めるだけになる。 */
+export function beginBatch(env) {
+  batches.set(env, { files: new Map(), messages: [] });
+}
+
+/**
+ * 溜めたものを1コミットで書く。失敗したら数回やり直し、それでもだめなら
+ * 「変わった」の印（kv のハッシュ）を消して、次の回にまた書き直せるようにする。
+ */
+export async function flushBatch(env, fallback = "データを更新") {
+  const batch = batches.get(env);
+  if (!batch) return { ok: true, skipped: true };
+  batches.delete(env);
+  if (!batch.files.size) return { ok: true, empty: true };
+  const files = Object.fromEntries(batch.files);
+  const messages = [...new Set(batch.messages)].filter(Boolean);
+  const message = (messages.join("／") || fallback).slice(0, 120);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await publishNow(env, files, message);
+      return { ok: true, files: batch.files.size };
+    } catch (e) {
+      if (attempt >= 3) {
+        await resetHashes(env);
+        throw e;
+      }
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+  }
+}
+
+/** 書き出しに失敗したときに「変わった」の印を消す（次の回でまた書き直す）。 */
+async function resetHashes(env) {
+  try {
+    await env.DB.prepare(
+      "DELETE FROM kv WHERE key IN ('common.hash', 'metar.hash', 'map.hash', 'radio.hash') OR key LIKE 'weather.%'",
+    ).run();
+  } catch (e) {
+    console.log("reset hashes failed: " + e.message);
+  }
+}
+
+/** 実際に1コミット書く。 */
+async function publishNow(env, files, message) {
   const branch = env.PAGES_BRANCH;
   const current = await listFiles(env, branch, "");              // 今配っているもの（ほかの仕事のデータを残す）
   const pages = await listFiles(env, env.GITHUB_BRANCH, "docs/"); // main の docs/ の静的なページ
